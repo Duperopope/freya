@@ -8,8 +8,6 @@
 
 Freya is an advanced multi-agent orchestrator aligned with the BMAD workflow (Business Model - Architecture - Development), designed to work with local LLMs via Ollama and Llama.cpp. It automates software development by coordinating specialized agents to transform a project brief into quality code.
 
-## Main Features
-
 - **Complete BMAD Workflow** : From business analysis to code delivery through specialized agents
 - **Multi-backend LLM Support** : Ollama and Llama.cpp for maximum flexibility
 - **Intelligent Benchmarking** : Automatic model routing by role based on performance benchmarks
@@ -29,7 +27,7 @@ Freya is an advanced multi-agent orchestrator aligned with the BMAD workflow (Bu
 
 ## Architecture
 
-Freya follows a modular architecture organized around specialized components :
+Freya follows a modular architecture organized around specialized components:
 
 ```
 freya2/
@@ -74,8 +72,6 @@ freya2/
             └── webwatch.py      # Web monitoring tool
 ```
 
-### Main Components
-
 - **Orchestrator** : System core, coordinates agents according to BMAD workflow
 - **Router** : Manages request routing to appropriate LLMs based on benchmarks
 - **Agents** : Specialized classes for each development workflow role
@@ -85,14 +81,12 @@ freya2/
 
 ### Logical Architecture
 
-### Architecture logique
-
-#### Vue d'ensemble des interactions
+#### Overview of interactions
 
 ```
                     ┌─────────────────┐
+                    │   User          │
                     │   Interface     │
-                    │   Utilisateur   │
                     │     (TUI)       │
                     └─────────┬───────┘
                               │
@@ -117,8 +111,8 @@ freya2/
           └─────────────────┘ └───────┘ └───────┘
 
                     ┌─────────────────┐
-                    │   Agents        │
-                    │ Spécialisés     │
+                    │   Specialized   │
+                    │     Agents      │
                     │                 │
                     │ • Analyst       │
                     │ • Architect     │
@@ -136,8 +130,8 @@ freya2/
           └─────────────────┘ └───────┘ └───────┘
 
                     ┌─────────────────┐
-                    │ Gestion         │
-                    │ Système         │
+                    │ System          │
+                    │ Management      │
                     │                 │
                     │ • Config        │
                     │ • Monitoring    │
@@ -148,16 +142,12 @@ freya2/
                     └─────────────────┘
 ```
 
-#### Main Data Flow
-
 1. **Interface** → **Orchestrator** : User command transmission
 2. **Orchestrator** → **Router** : Intelligent LLM selection
 3. **Router** → **LLM Clients** : AI request execution
 4. **Orchestrator** → **Agents** : Business workflow coordination
 5. **Agents** → **Tools** : Concrete actions (shell, web, IDE)
 6. **System Management** : Cross-cutting support (config, monitoring, quality)
-
-#### Functional Relationships
 
 - **Orchestrator ↔ BMAD Sync** : Development workflow management
 - **Router ↔ BenchmarkQ** : LLM performance optimization
@@ -186,13 +176,15 @@ freya2/
 └─────────────────────────────────────┘
 ```
 
-## Installation
+## Quickstart (Windows)
 
-```bash
-pip install -e .
+### 1) Install (editable)
+
+```powershell
+cd H:\Code\Freya2
+.\.venv\Scripts\python.exe -m pip install -U pip
+.\.venv\Scripts\python.exe -m pip install -e .
 ```
-
-## Configuration
 
 Freya uses a flexible configuration system via environment variables :
 
@@ -215,8 +207,6 @@ Freya uses a flexible configuration system via environment variables :
 
 - `freya tui` : Launch the interactive text user interface
 
-## TUI Interface
-
 The TUI interface offers several tabs :
 
 - **Chat** : Direct interaction with agents
@@ -226,30 +216,20 @@ The TUI interface offers several tabs :
 - **Files** : Project file management
 - **Watch** : Real-time web monitoring
 
-## BMAD Workflow
-
 1. **Business Model** : Project analysis and briefing
 2. **Architecture** : Technical design and specifications
 3. **Development** : Iterative implementation with agents
 4. **Delivery** : Finalized and tested code
 
-## Security
-
 Freya never deletes files outside its `.freya` directory. All operations are isolated and caches/logs are automatically managed.
 
 ## Supported LLM Servers
 
-### Ollama
-
 - Default server : http://localhost:11434
 - Automatic routing by role based on benchmarks
 
-### Llama.cpp
-
 - Configurable server via `FREYA_LLAMACPP_*`
 - Support for local GGUF models
-
-## Development
 
 Freya is developed in Python 3.11+ with the following dependencies :
 
@@ -261,9 +241,22 @@ Freya is developed in Python 3.11+ with the following dependencies :
 
 ## Version
 
-Current version: **1.1**
+Current version: **1.1.5**
 
 ## Patch Notes
+
+### v1.1.5 (January 25, 2026)
+
+- Consolidated README into a single bilingual file (English & French)
+- Added comprehensive Commands (CLI) section with autopilot command
+- Added high-level Architecture overview with simplified diagram
+- Added Security guidelines and recommendations
+- Added Fonts & icons recommendations for terminal display
+- Added Status & roadmap with current features and upcoming developments
+- Added References / Sources section with relevant links
+- Updated Quickstart with detailed Windows installation steps
+- Removed redundant separate French README file
+- Updated language badges to reflect unified bilingual documentation
 
 ### v1.1 (January 25, 2026)
 
@@ -279,3 +272,89 @@ Current version: **1.1**
 - Enhanced Cyber Watch with better formatting and prioritization
 - Added progress tracking for benchmark phases and models
 - Fixed async handling in TUI artifacts tree reload for improved stability
+
+## Commands (CLI)
+
+### Model management
+
+- `freya discover-models` — list installed Ollama models
+
+### Benchmarking
+
+- `freya bench-fast` — fast (1 trial)
+- `freya bench-standard` — standard (5 trials)
+- `freya bench-advanced` — advanced (5 trials)
+
+### UI
+
+- `freya tui` — launch the Textual interface
+
+### Delivery automation
+
+- `freya autopilot --goal ... --name ... --output ...` — generate a project + tests + open VS Code
+
+## Architecture (high-level)
+
+Freya is designed as a modular system:
+
+- **CLI (freya)** : commands (discover/bench/tui/autopilot)
+- **Router (LLMRouter)** : bench + routing requests to the best model
+- **LLM Clients** : Ollama (and optionally llama.cpp server)
+- **TUI (Textual)** : terminal UI
+- **Autopilot** : reproducible pipeline "project → code → tests → validation → VS Code"
+- **Artifacts & logs** : JSONL events and resume-friendly state
+
+### Logical diagram (simplified)
+
+```
+User (TUI/CLI)
+   |
+   v
+Orchestrator / Autopilot
+   |
+   +--> Router (bench + pick best model)
+   |         |
+   |         +--> Ollama / llama.cpp
+   |
+   +--> Tools (shell / web watch / fs / ide)
+   |
+   +--> Artifacts + Logs (JSONL) + State (resume)
+```
+
+## Security
+
+- **Local-first** : local execution, local models.
+- **Traceability** : event logs (JSONL) for diagnosis/replay.
+- **Strong recommendation** : never paste tokens/keys in plain text in the UI, prompts or logs.
+
+## Fonts & icons (recommended)
+
+For clean rendering (terminal icons), use a Nerd Font in Windows Terminal (ex: CaskaydiaCove Nerd Font) then configure the profile.
+
+## Status & roadmap
+
+### ✅ Already operational:
+
+- CLI (discover, bench, tui)
+- Bench + routing (selection by role)
+- Autopilot V1 (project + tests + VS Code opening)
+
+### 🔜 Coming iteratively:
+
+- Complete BMAD Orchestrator (artifacts + run/resume)
+- Dev/QA loop "tests failing → patch → retest" via LLMRouter
+- Dedicated Bench Chat / Summary / Web-research
+- Filled and editable Settings (prompts/presets/hats)
+- Cyber Watch (watch) via public sources (API/RSS), formatted FR
+
+## References / Sources
+
+- **BMAD Method** (workflow & artefacts): https://github.com/bmad-code-org/BMAD-METHOD
+- **Ollama API** (tags/generate): https://github.com/ollama/ollama/blob/main/docs/api.md
+- **llama.cpp** (server): https://github.com/ggerganov/llama.cpp
+- **Textual** (TUI framework): https://textual.textualize.io/
+- **VS Code CLI** (code): https://code.visualstudio.com/docs/editor/command-line
+- **Python venv**: https://docs.python.org/3/library/venv.html
+- **Pytest**: https://docs.pytest.org/en/stable/
+- **Windows Terminal settings** (fonts, profiles): https://learn.microsoft.com/windows/terminal/customize-settings/profile-settings
+- **Nerd Fonts**: https://www.nerdfonts.com/

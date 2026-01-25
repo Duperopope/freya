@@ -41,7 +41,9 @@ def _bench(program: str, mode: str, trials: int, roles: list[str] | None) -> int
         if evt == "phase_start":
             console.rule(f"[bold]{payload.get('phase')}[/bold]")
         elif evt == "role_start":
-            console.print(f"[cyan]{payload.get('role')}[/cyan] • {payload.get('phase')} • models={payload.get('total_models')}")
+            console.print(
+                f"[cyan]{payload.get('role')}[/cyan] • {payload.get('phase')} • models={payload.get('total_models')}"
+            )
         elif evt == "model_done":
             console.print(
                 f"  {payload.get('role')} / {payload.get('phase')} / {payload.get('model')}"
@@ -88,6 +90,33 @@ def cmd_bench_advanced(_: argparse.Namespace) -> int:
     return _bench("bench-advanced", "tune", 5, None)
 
 
+def cmd_autopilot(args: argparse.Namespace) -> int:
+    # IMPORTANT: module is freya.autopilot (not freya.tools.autopilot)
+    from .autopilot import AutopilotConfig, FreyaAutopilot
+
+    cfg = FreyaConfig.load()
+
+    default_base = getattr(cfg, "artifacts_root", cfg.cache_root) / "projects"
+    output_dir = Path(args.output).resolve() if args.output else (default_base / args.name).resolve()
+
+    console.rule("[bold]Freya Autopilot[/bold]")
+    console.print(f"[dim]Output:[/dim] {output_dir}")
+    console.print(f"[dim]Name:[/dim] {args.name}")
+    console.print(f"[dim]Max fix iters:[/dim] {args.max_fix_iters}")
+
+    ap_cfg = AutopilotConfig(
+        goal=str(args.goal),
+        output_dir=str(output_dir),
+        project_name=str(args.name),
+        max_fix_iters=int(args.max_fix_iters),
+        open_vscode=not bool(args.no_vscode),
+    )
+
+    FreyaAutopilot(ap_cfg).run()
+    console.print("[green]OK: projet généré + tests passés.[/green]")
+    return 0
+
+
 def cmd_tui(_: argparse.Namespace) -> int:
     from .tui import FreyaTUI
 
@@ -110,6 +139,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("bench-advanced")
     s.set_defaults(func=cmd_bench_advanced)
+
+    s = sub.add_parser("autopilot")
+    s.add_argument("--goal", required=True, help="Objectif produit en français.")
+    s.add_argument("--name", required=False, default="FreyaApp", help="Nom du projet.")
+    s.add_argument("--output", required=False, help="Dossier de sortie (sinon base Freya).")
+    s.add_argument("--max-fix-iters", type=int, default=3, help="Itérations max de correction.")
+    s.add_argument("--no-vscode", action="store_true", help="Ne pas ouvrir VS Code.")
+    s.set_defaults(func=cmd_autopilot)
 
     s = sub.add_parser("tui")
     s.set_defaults(func=cmd_tui)

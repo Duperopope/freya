@@ -1,6 +1,7 @@
 README.md
 pyproject.toml
 src/freya/__init__.py
+src/freya/autopilot.py
 src/freya/benchmarkq.py
 src/freya/bmad_sync.py
 src/freya/cli.py
