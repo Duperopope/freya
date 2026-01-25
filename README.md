@@ -278,3 +278,4 @@ Current version: **1.1**
 - Added PowerShell status integration in TUI
 - Enhanced Cyber Watch with better formatting and prioritization
 - Added progress tracking for benchmark phases and models
+- Fixed async handling in TUI artifacts tree reload for improved stability

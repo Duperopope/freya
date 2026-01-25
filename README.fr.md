@@ -278,3 +278,4 @@ Version actuelle : **1.1**
 - Ajout de l'intégration du statut PowerShell dans l'interface TUI
 - Amélioration de Cyber Watch avec un meilleur formatage et priorisation
 - Ajout du suivi de progression pour les phases et modèles de benchmark
+- Correction de la gestion asynchrone dans le rechargement de l'arbre d'artefacts TUI pour une meilleure stabilité
