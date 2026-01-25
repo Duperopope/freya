@@ -21,6 +21,62 @@ Freya est une orchestratrice multi-agents avancée alignée sur le workflow BMAD
 - **Gestion de modèles** : Téléchargement, suivi et optimisation automatique
 - **Sécurité renforcée** : Isolation des opérations dans des répertoires gérés
 
+## Architecture
+
+Freya suit une architecture modulaire organisée autour de composants spécialisés :
+
+```
+freya2/
+├── freya.ps1                    # Script PowerShell pour l'installation
+├── pyproject.toml               # Configuration du projet Python
+├── README.md                    # Documentation
+├── bench_raw/                   # Données brutes des benchmarks
+└── src/
+    └── freya/
+        ├── __init__.py          # Point d'entrée du package
+        ├── cli.py               # Interface en ligne de commande
+        ├── config.py            # Configuration centralisée
+        ├── orchestrator.py      # Coordination des agents
+        ├── router.py            # Routage intelligent des LLMs
+        ├── tui.py               # Interface utilisateur textuelle
+        ├── benchmarkq.py        # Suite de benchmarking
+        ├── bmad_sync.py         # Synchronisation BMAD
+        ├── console.py           # Utilitaires console
+        ├── fsx.py               # Extensions système de fichiers
+        ├── ide.py               # Contrôleur IDE
+        ├── llamacpp_server.py  # Client Llama.cpp
+        ├── loggingx.py          # Extensions de logging
+        ├── model_manager.py     # Gestionnaire de modèles
+        ├── monitoring.py        # Monitoring système
+        ├── ollama_client.py     # Client Ollama
+        ├── openai_compat_client.py # Compatibilité OpenAI
+        ├── powershell.py        # Intégration PowerShell
+        ├── quality.py           # Portes qualité
+        ├── agents/              # Agents spécialisés
+        │   ├── __init__.py
+        │   ├── analyst.py       # Agent d'analyse
+        │   ├── architect.py     # Agent architecte
+        │   ├── base.py          # Classe de base des agents
+        │   ├── dev.py           # Agent développeur
+        │   ├── pm.py            # Agent Product Manager
+        │   ├── po.py            # Agent Product Owner
+        │   ├── qa.py            # Agent QA
+        │   └── sm.py            # Agent Scrum Master
+        └── tools/               # Outils intégrés
+            ├── __init__.py
+            ├── shell.py         # Outil shell
+            └── webwatch.py      # Outil surveillance web
+```
+
+### Composants principaux
+
+- **Orchestrator** : Cœur du système, coordonne les agents selon le workflow BMAD
+- **Router** : Gère le routage des requêtes vers les LLMs appropriés basé sur les benchmarks
+- **Agents** : Classes spécialisées pour chaque rôle du workflow de développement
+- **Tools** : Utilitaires pour interagir avec le système et le web
+- **Clients LLM** : Interfaces pour Ollama et Llama.cpp
+- **TUI** : Interface utilisateur moderne avec Textual
+
 ## Installation
 
 ```bash
