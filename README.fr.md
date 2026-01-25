@@ -258,3 +258,23 @@ Freya est développée en Python 3.11+ avec les dépendances suivantes :
 - rich : Interface console enrichie
 - textual : Interface TUI
 - psutil : Monitoring système
+
+## Version
+
+Version actuelle : **1.1**
+
+## Notes de version
+
+### v1.1 (25 janvier 2026)
+
+- Ajout du support de la police CaskaydiaCove Nerd Font pour un affichage terminal amélioré
+- Amélioration de l'interface TUI avec intégration du presse-papiers (copier la dernière réponse)
+- Ajout de barres de progression en temps réel pour les benchmarks
+- Amélioration de la gestion des artefacts avec survol et sélection
+- Ajout de nouveaux outils : clipboard.py et redact.py pour la sécurité
+- Mise à jour de la disposition de l'interface avec de meilleures proportions (60/40)
+- Ajout de la fonctionnalité d'ouverture d'espace de travail VS Code
+- Amélioration de la journalisation du chat avec rendu Markdown et panneaux
+- Ajout de l'intégration du statut PowerShell dans l'interface TUI
+- Amélioration de Cyber Watch avec un meilleur formatage et priorisation
+- Ajout du suivi de progression pour les phases et modèles de benchmark
