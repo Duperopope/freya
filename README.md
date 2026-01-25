@@ -1,83 +1,85 @@
 # Freya
 
-Freya est une orchestratrice multi-agents avancée alignée sur le workflow BMAD (Business Model - Architecture - Development), conçue pour travailler avec des LLMs locaux via Ollama et Llama.cpp. Elle automatise le développement logiciel en coordonnant des agents spécialisés pour transformer un brief de projet en code de qualité.
+[![English](https://img.shields.io/badge/Language-English-blue.svg)](README.md) [![Français](https://img.shields.io/badge/Langue-Français-red.svg)](README.fr.md)
 
-## Fonctionnalités principales
+Freya is an advanced multi-agent orchestrator aligned with the BMAD workflow (Business Model - Architecture - Development), designed to work with local LLMs via Ollama and Llama.cpp. It automates software development by coordinating specialized agents to transform a project brief into quality code.
 
-- **Workflow BMAD complet** : De l'analyse métier à la livraison de code via des agents spécialisés
-- **Support multi-backend LLM** : Ollama et Llama.cpp pour une flexibilité maximale
-- **Benchmarking intelligent** : Routage automatique des modèles par rôle basé sur des benchmarks de performance
-- **Interface TUI moderne** : Interface utilisateur textuelle interactive avec Textual
-- **Agents spécialisés** :
-  - Analyst : Analyse des exigences
-  - Product Owner : Gestion des priorités métier
-  - Architect : Conception technique
-  - Scrum Master : Coordination d'équipe
-  - Developer : Développement de code
-  - QA : Assurance qualité
-- **Outils intégrés** :
-  - Shell : Exécution de commandes système
-  - WebWatch : Surveillance web et scraping
-- **Gestion de modèles** : Téléchargement, suivi et optimisation automatique
-- **Sécurité renforcée** : Isolation des opérations dans des répertoires gérés
+## Main Features
+
+- **Complete BMAD Workflow** : From business analysis to code delivery through specialized agents
+- **Multi-backend LLM Support** : Ollama and Llama.cpp for maximum flexibility
+- **Intelligent Benchmarking** : Automatic model routing by role based on performance benchmarks
+- **Modern TUI Interface** : Interactive text-based user interface with Textual
+- **Specialized Agents** :
+  - Analyst : Requirements analysis
+  - Product Owner : Business priorities management
+  - Architect : Technical design
+  - Scrum Master : Team coordination
+  - Developer : Code development
+  - QA : Quality assurance
+- **Integrated Tools** :
+  - Shell : System command execution
+  - WebWatch : Web monitoring and scraping
+- **Model Management** : Automatic downloading, tracking and optimization
+- **Enhanced Security** : Operations isolation in managed directories
 
 ## Architecture
 
-Freya suit une architecture modulaire organisée autour de composants spécialisés :
+Freya follows a modular architecture organized around specialized components :
 
 ```
 freya2/
-├── freya.ps1                    # Script PowerShell pour l'installation
-├── pyproject.toml               # Configuration du projet Python
+├── freya.ps1                    # PowerShell installation script
+├── pyproject.toml               # Python project configuration
 ├── README.md                    # Documentation
-├── bench_raw/                   # Données brutes des benchmarks
+├── bench_raw/                   # Raw benchmark data
 └── src/
     └── freya/
-        ├── __init__.py          # Point d'entrée du package
-        ├── cli.py               # Interface en ligne de commande
-        ├── config.py            # Configuration centralisée
-        ├── orchestrator.py      # Coordination des agents
-        ├── router.py            # Routage intelligent des LLMs
-        ├── tui.py               # Interface utilisateur textuelle
-        ├── benchmarkq.py        # Suite de benchmarking
-        ├── bmad_sync.py         # Synchronisation BMAD
-        ├── console.py           # Utilitaires console
-        ├── fsx.py               # Extensions système de fichiers
-        ├── ide.py               # Contrôleur IDE
-        ├── llamacpp_server.py  # Client Llama.cpp
-        ├── loggingx.py          # Extensions de logging
-        ├── model_manager.py     # Gestionnaire de modèles
-        ├── monitoring.py        # Monitoring système
-        ├── ollama_client.py     # Client Ollama
-        ├── openai_compat_client.py # Compatibilité OpenAI
-        ├── powershell.py        # Intégration PowerShell
-        ├── quality.py           # Portes qualité
-        ├── agents/              # Agents spécialisés
+        ├── __init__.py          # Package entry point
+        ├── cli.py               # Command line interface
+        ├── config.py            # Centralized configuration
+        ├── orchestrator.py      # Agent coordination
+        ├── router.py            # Intelligent LLM routing
+        ├── tui.py               # Text user interface
+        ├── benchmarkq.py        # Benchmarking suite
+        ├── bmad_sync.py         # BMAD synchronization
+        ├── console.py           # Console utilities
+        ├── fsx.py               # File system extensions
+        ├── ide.py               # IDE controller
+        ├── llamacpp_server.py  # Llama.cpp client
+        ├── loggingx.py          # Logging extensions
+        ├── model_manager.py     # Model manager
+        ├── monitoring.py        # System monitoring
+        ├── ollama_client.py     # Ollama client
+        ├── openai_compat_client.py # OpenAI compatibility
+        ├── powershell.py        # PowerShell integration
+        ├── quality.py           # Quality gates
+        ├── agents/              # Specialized agents
         │   ├── __init__.py
-        │   ├── analyst.py       # Agent d'analyse
-        │   ├── architect.py     # Agent architecte
-        │   ├── base.py          # Classe de base des agents
-        │   ├── dev.py           # Agent développeur
-        │   ├── pm.py            # Agent Product Manager
-        │   ├── po.py            # Agent Product Owner
-        │   ├── qa.py            # Agent QA
-        │   └── sm.py            # Agent Scrum Master
-        └── tools/               # Outils intégrés
+        │   ├── analyst.py       # Analysis agent
+        │   ├── architect.py     # Architecture agent
+        │   ├── base.py          # Base agent class
+        │   ├── dev.py           # Developer agent
+        │   ├── pm.py            # Product Manager agent
+        │   ├── po.py            # Product Owner agent
+        │   ├── qa.py            # QA agent
+        │   └── sm.py            # Scrum Master agent
+        └── tools/               # Integrated tools
             ├── __init__.py
-            ├── shell.py         # Outil shell
-            └── webwatch.py      # Outil surveillance web
+            ├── shell.py         # Shell tool
+            └── webwatch.py      # Web monitoring tool
 ```
 
-### Composants principaux
+### Main Components
 
-- **Orchestrator** : Cœur du système, coordonne les agents selon le workflow BMAD
-- **Router** : Gère le routage des requêtes vers les LLMs appropriés basé sur les benchmarks
-- **Agents** : Classes spécialisées pour chaque rôle du workflow de développement
-- **Tools** : Utilitaires pour interagir avec le système et le web
-- **Clients LLM** : Interfaces pour Ollama et Llama.cpp
-- **TUI** : Interface utilisateur moderne avec Textual
+- **Orchestrator** : System core, coordinates agents according to BMAD workflow
+- **Router** : Manages request routing to appropriate LLMs based on benchmarks
+- **Agents** : Specialized classes for each development workflow role
+- **Tools** : Utilities to interact with system and web
+- **LLM Clients** : Interfaces for Ollama and Llama.cpp
+- **TUI** : Modern user interface with Textual
 
-### Architecture logique
+### Logical Architecture
 
 ### Architecture logique
 
@@ -142,28 +144,28 @@ freya2/
                     └─────────────────┘
 ```
 
-#### Flux de données principal
+#### Main Data Flow
 
-1. **Interface** → **Orchestrator** : Transmission des commandes utilisateur
-2. **Orchestrator** → **Router** : Sélection intelligente du LLM
-3. **Router** → **Clients LLM** : Exécution des requêtes IA
-4. **Orchestrator** → **Agents** : Coordination du workflow métier
-5. **Agents** → **Tools** : Actions concrètes (shell, web, IDE)
-6. **Gestion Système** : Support transversal (config, monitoring, qualité)
+1. **Interface** → **Orchestrator** : User command transmission
+2. **Orchestrator** → **Router** : Intelligent LLM selection
+3. **Router** → **LLM Clients** : AI request execution
+4. **Orchestrator** → **Agents** : Business workflow coordination
+5. **Agents** → **Tools** : Concrete actions (shell, web, IDE)
+6. **System Management** : Cross-cutting support (config, monitoring, quality)
 
-#### Relations fonctionnelles
+#### Functional Relationships
 
-- **Orchestrator ↔ BMAD Sync** : Gestion du workflow de développement
-- **Router ↔ BenchmarkQ** : Optimisation des performances LLM
-- **Agents ↔ Tools** : Exécution des tâches opérationnelles
-- **TUI ↔ Tous composants** : Interface unifiée et visualisation
-- **Gestion Système** : Infrastructure partagée et monitoring
+- **Orchestrator ↔ BMAD Sync** : Development workflow management
+- **Router ↔ BenchmarkQ** : LLM performance optimization
+- **Agents ↔ Tools** : Operational task execution
+- **TUI ↔ All components** : Unified interface and visualization
+- **System Management** : Shared infrastructure and monitoring
 
-#### Architecture en couches
+#### Layered Architecture
 
 ```
 ┌─────────────────────────────────────┐
-│         Interface Utilisateur       │
+│         User Interface              │
 │               (TUI)                 │
 ├─────────────────────────────────────┤
 │         Coordination                │
@@ -172,11 +174,11 @@ freya2/
 │         Intelligence                │
 │   (Router + BenchmarkQ + Agents)    │
 ├─────────────────────────────────────┤
-│         Exécution                   │
-│   (Clients LLM + Tools)             │
+│         Execution                   │
+│   (LLM Clients + Tools)             │
 ├─────────────────────────────────────┤
 │         Infrastructure              │
-│   (Config + Monitoring + Système)   │
+│   (Config + Monitoring + System)    │
 └─────────────────────────────────────┘
 ```
 
@@ -188,67 +190,67 @@ pip install -e .
 
 ## Configuration
 
-Freya utilise un système de configuration flexible via variables d'environnement :
+Freya uses a flexible configuration system via environment variables :
 
-- `FREYA_MANAGED_ROOT` : Répertoire de gestion (.freya par défaut)
-- `FREYA_OLLAMA_URL` : URL du serveur Ollama (http://localhost:11434)
-- `FREYA_LLAMACPP_EXE` : Chemin vers llama-server.exe
-- `FREYA_GGUF_DIR` : Répertoire des modèles GGUF
-- `FREYA_DISK_FREE_MIN_GB` : Espace disque minimum requis (40GB)
+- `FREYA_MANAGED_ROOT` : Management directory (.freya by default)
+- `FREYA_OLLAMA_URL` : Ollama server URL (http://localhost:11434)
+- `FREYA_LLAMACPP_EXE` : Path to llama-server.exe
+- `FREYA_GGUF_DIR` : Directory for GGUF models
+- `FREYA_DISK_FREE_MIN_GB` : Minimum required disk space (40GB)
 
-## Commandes
+## Commands
 
-### Découverte et benchmarking
+### Discovery and benchmarking
 
-- `freya discover-models` : Liste les modèles Ollama installés
-- `freya bench-fast` : Benchmark rapide (1 essai, mode quick)
-- `freya bench-standard` : Benchmark standard (5 essais, mode tune)
-- `freya bench-advanced` : Benchmark avancé (5 essais, mode tune)
+- `freya discover-models` : List installed Ollama models
+- `freya bench-fast` : Fast benchmark (1 trial, quick mode)
+- `freya bench-standard` : Standard benchmark (5 trials, tune mode)
+- `freya bench-advanced` : Advanced benchmark (5 trials, tune mode)
 
-### Interface utilisateur
+### User interface
 
-- `freya tui` : Lance l'interface utilisateur textuelle interactive
+- `freya tui` : Launch the interactive text user interface
 
-## Interface TUI
+## TUI Interface
 
-L'interface TUI offre plusieurs onglets :
+The TUI interface offers several tabs :
 
-- **Chat** : Interaction directe avec les agents
-- **Bench** : Gestion et visualisation des benchmarks
-- **Dev** : Outils de développement intégrés
-- **Settings** : Configuration avancée
-- **Files** : Gestion des fichiers du projet
-- **Watch** : Surveillance web en temps réel
+- **Chat** : Direct interaction with agents
+- **Bench** : Benchmark management and visualization
+- **Dev** : Integrated development tools
+- **Settings** : Advanced configuration
+- **Files** : Project file management
+- **Watch** : Real-time web monitoring
 
-## Workflow BMAD
+## BMAD Workflow
 
-1. **Business Model** : Analyse et brief du projet
-2. **Architecture** : Conception technique et spécifications
-3. **Development** : Implémentation itérative avec agents
-4. **Delivery** : Code finalisé et testé
+1. **Business Model** : Project analysis and briefing
+2. **Architecture** : Technical design and specifications
+3. **Development** : Iterative implementation with agents
+4. **Delivery** : Finalized and tested code
 
-## Sécurité
+## Security
 
-Freya ne supprime jamais de fichiers en dehors de son répertoire `.freya`. Toutes les opérations sont isolées et les caches/logs sont gérés automatiquement.
+Freya never deletes files outside its `.freya` directory. All operations are isolated and caches/logs are automatically managed.
 
-## Serveurs LLM supportés
+## Supported LLM Servers
 
 ### Ollama
 
-- Serveur par défaut : http://localhost:11434
-- Routage automatique par rôle basé sur les benchmarks
+- Default server : http://localhost:11434
+- Automatic routing by role based on benchmarks
 
 ### Llama.cpp
 
-- Serveur configurable via `FREYA_LLAMACPP_*`
-- Support des modèles GGUF locaux
+- Configurable server via `FREYA_LLAMACPP_*`
+- Support for local GGUF models
 
-## Développement
+## Development
 
-Freya est développée en Python 3.11+ avec les dépendances suivantes :
+Freya is developed in Python 3.11+ with the following dependencies :
 
-- pydantic : Validation de données
-- requests : Communications HTTP
-- rich : Interface console enrichie
-- textual : Interface TUI
-- psutil : Monitoring système
+- pydantic : Data validation
+- requests : HTTP communications
+- rich : Enhanced console interface
+- textual : TUI framework
+- psutil : System monitoring
