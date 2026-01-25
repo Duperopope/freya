@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "freya"
+version = "0.1.0"
+description = "Freya - BMAD-aligned multi-agent orchestrator for local LLMs via Ollama"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.7.0",
+  "requests>=2.32.0",
+  "rich>=13.7.0",
+  "textual",
+  "psutil>=6.0.0",
+]
+
+[project.scripts]
+freya = "freya.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

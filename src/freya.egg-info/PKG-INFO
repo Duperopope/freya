@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: freya
+Version: 0.1.0
+Summary: Freya - BMAD-aligned multi-agent orchestrator for local LLMs via Ollama
+Requires-Python: >=3.11
+Requires-Dist: pydantic>=2.7.0
+Requires-Dist: requests>=2.32.0
+Requires-Dist: rich>=13.7.0
+Requires-Dist: psutil>=6.0.0
