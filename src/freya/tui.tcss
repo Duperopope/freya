@@ -1,0 +1,141 @@
+/* src/freya/tui.tcss */
+
+Screen {
+  background: #0b0f14;
+  color: #e6edf3;
+}
+
+#root {
+  height: 1fr;
+}
+
+#left {
+  width: 62%;
+  padding: 1 1;
+}
+
+#right {
+  width: 38%;
+  padding: 1 1;
+  border-left: solid #263041;
+}
+
+.muted {
+  color: #8b949e;
+}
+
+#tabs {
+  border: solid #263041;
+  padding: 1;
+}
+
+#chat_toolbar {
+  border: solid #263041;
+  padding: 1;
+  background: #0f1620;
+}
+
+#chat_row1 {
+  height: auto;
+  padding-bottom: 1;
+}
+
+#custom_instructions {
+  height: 6;
+  border: solid #263041;
+  background: #0b0f14;
+}
+
+#chat_log {
+  border: solid #263041;
+  background: #0b0f14;
+}
+
+#chat_composer {
+  border: solid #263041;
+  padding: 1;
+  background: #0f1620;
+}
+
+#chat_input {
+  height: 6;
+  border: solid #263041;
+  background: #0b0f14;
+}
+
+#chat_actions {
+  height: auto;
+  padding-top: 1;
+}
+
+#bench_toolbar {
+  border: solid #263041;
+  padding: 1;
+  background: #0f1620;
+}
+
+#bench_table {
+  border: solid #263041;
+  background: #0b0f14;
+}
+
+#bmad_toolbar {
+  border: solid #263041;
+  padding: 1;
+  background: #0f1620;
+}
+
+#bmad_overview {
+  border: solid #263041;
+  padding: 1;
+  background: #0b0f14;
+}
+
+#settings_panel {
+  border: solid #263041;
+  padding: 1;
+  background: #0f1620;
+}
+
+#art_title {
+  content-align: left middle;
+  padding: 0 0 1 0;
+}
+
+#art_root {
+  color: #8b949e;
+  padding-bottom: 1;
+}
+
+#art_tree {
+  border: solid #263041;
+  height: 18;
+  background: #0b0f14;
+}
+
+#art_preview {
+  border: solid #263041;
+  height: 1fr;
+  background: #0b0f14;
+}
+
+#gp_modal {
+  width: 80%;
+  height: 60%;
+  padding: 1;
+  border: solid #58a6ff;
+  background: #0b0f14;
+}
+
+#gp_text {
+  height: 1fr;
+  border: solid #263041;
+  background: #0b0f14;
+}
+
+#gp_buttons {
+  height: auto;
+  padding-top: 1;
+}
+
+.hidden { display: none; }

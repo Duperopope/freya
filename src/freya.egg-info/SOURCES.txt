@@ -16,6 +16,7 @@ src/freya/ollama_client.py
 src/freya/openai_compat_client.py
 src/freya/orchestrator.py
 src/freya/powershell.py
+src/freya/prompts_store.py
 src/freya/quality.py
 src/freya/router.py
 src/freya/tui.py
@@ -38,4 +39,5 @@ src/freya/tools/__init__.py
 src/freya/tools/clipboard.py
 src/freya/tools/redact.py
 src/freya/tools/shell.py
+src/freya/tools/websearch.py
 src/freya/tools/webwatch.py

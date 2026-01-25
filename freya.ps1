@@ -1,39 +1,24 @@
 $ErrorActionPreference = "Stop"
 
-function Get-VenvPython {
-    $py = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
-    if (-not (Test-Path $py)) { throw "Venv introuvable: $py (crée-le avec: python -m venv .venv)" }
-    return $py
-}
+$scriptPath = $MyInvocation.MyCommand.Path
+if ([string]::IsNullOrWhiteSpace($scriptPath)) { throw "Lance via .\freya.ps1" }
+$root = Split-Path -Parent $scriptPath
 
-function Update-Pip {
-    $py = Get-VenvPython
-    & $py -m pip install -U pip | Out-Null
-}
+$py = Join-Path $root ".venv\Scripts\python.exe"
+if (-not (Test-Path $py)) { throw "Venv introuvable: $py" }
 
-function Install-PythonPackage([string]$name) {
-    $py = Get-VenvPython
-    & $py -c "import $name" 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Installing $name ..." -ForegroundColor Yellow
-        & $py -m pip install -U $name
-    }
-}
+& $py -m pip install -U pip | Out-Null
+& $py -c "import rich" 2>$null; if ($LASTEXITCODE -ne 0) { & $py -m pip install -U rich | Out-Null }
+& $py -c "import textual" 2>$null; if ($LASTEXITCODE -ne 0) { & $py -m pip install -U textual | Out-Null }
 
-$py = Get-VenvPython
-Update-Pip
-Install-PythonPackage "rich"
-Install-PythonPackage "textual"
+& $py -m pip install -e $root | Out-Null
 
-Write-Host "Installing Freya (editable)..." -ForegroundColor Cyan
-& $py -m pip install -e $PSScriptRoot | Out-Null
+# Standalone PowerShell window (no wt)
+$psExe = "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
+$cmd = "Set-Location -LiteralPath `"$root`"; & `"$py`" -m freya.cli tui"
 
-Write-Host "Launching Freya TUI..." -ForegroundColor Cyan
-try {
-    & freya tui
-    exit $LASTEXITCODE
-}
-catch {
-    & $py -m freya.cli tui
-    exit $LASTEXITCODE
-}
+Start-Process -FilePath $psExe -ArgumentList @(
+    "-NoExit",
+    "-ExecutionPolicy", "Bypass",
+    "-Command", $cmd
+) | Out-Null
