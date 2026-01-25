@@ -35,5 +35,7 @@ src/freya/agents/po.py
 src/freya/agents/qa.py
 src/freya/agents/sm.py
 src/freya/tools/__init__.py
+src/freya/tools/clipboard.py
+src/freya/tools/redact.py
 src/freya/tools/shell.py
 src/freya/tools/webwatch.py
