@@ -1,4 +1,5 @@
 pydantic>=2.7.0
 requests>=2.32.0
 rich>=13.7.0
+textual
 psutil>=6.0.0

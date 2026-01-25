@@ -6,4 +6,5 @@ Requires-Python: >=3.11
 Requires-Dist: pydantic>=2.7.0
 Requires-Dist: requests>=2.32.0
 Requires-Dist: rich>=13.7.0
+Requires-Dist: textual
 Requires-Dist: psutil>=6.0.0
