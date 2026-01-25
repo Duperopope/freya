@@ -2,6 +2,10 @@
 
 [![English](https://img.shields.io/badge/Language-English-blue.svg)](README.md) [![Français](https://img.shields.io/badge/Langue-Français-red.svg)](README.fr.md)
 
+[![Construit avec IA](https://img.shields.io/badge/Construit%20avec-IA-FF6B6B.svg)](https://github.com/features/copilot) [![Alimenté par IA](https://img.shields.io/badge/Alimenté%20par--IA-Oui-9C88FF.svg)](https://ollama.ai) [![Ollama](https://img.shields.io/badge/Alimenté%20par-Ollama-00ADD8.svg)](https://ollama.ai) [![Llama.cpp](https://img.shields.io/badge/Supporte-Llama.cpp-FF6B35.svg)](https://github.com/ggerganov/llama.cpp)
+
+[![Llama 3.1](https://img.shields.io/badge/Modèle-Llama%203.1-FF6B35.svg)](https://ollama.ai/library/llama3.1) [![Mistral](https://img.shields.io/badge/Modèle-Mistral-9C88FF.svg)](https://ollama.ai/library/mistral) [![Qwen](https://img.shields.io/badge/Modèle-Qwen-00ADD8.svg)](https://ollama.ai/library/qwen) [![CodeLlama](https://img.shields.io/badge/Modèle-CodeLlama-FF6B6B.svg)](https://ollama.ai/library/codellama) [![Dolphin](https://img.shields.io/badge/Modèle-Dolphin-9C88FF.svg)](https://ollama.ai/library/dolphin-llama3)
+
 Freya est une orchestratrice multi-agents avancée alignée sur le workflow BMAD (Business Model - Architecture - Development), conçue pour travailler avec des LLMs locaux via Ollama et Llama.cpp. Elle automatise le développement logiciel en coordonnant des agents spécialisés pour transformer un brief de projet en code de qualité.
 
 ## Fonctionnalités principales
