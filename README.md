@@ -258,3 +258,23 @@ Freya is developed in Python 3.11+ with the following dependencies :
 - rich : Enhanced console interface
 - textual : TUI framework
 - psutil : System monitoring
+
+## Version
+
+Current version: **1.1**
+
+## Patch Notes
+
+### v1.1 (January 25, 2026)
+
+- Added CaskaydiaCove Nerd Font support for enhanced terminal display
+- Enhanced TUI with clipboard integration (copy last answer)
+- Added benchmark live progress bars and controls
+- Improved artifact management with hover and selection
+- Added new tools: clipboard.py and redact.py for security
+- Updated UI layout with better proportions (60/40 split)
+- Added VS Code workspace opening functionality
+- Improved chat logging with Markdown rendering and panels
+- Added PowerShell status integration in TUI
+- Enhanced Cyber Watch with better formatting and prioritization
+- Added progress tracking for benchmark phases and models
