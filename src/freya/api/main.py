@@ -123,7 +123,7 @@ def create_app(
     app = FastAPI(
         title="Freya API",
         description="BMAD-aligned multi-agent orchestrator for local LLMs",
-        version="2.1.0",
+        version="2.2.0",
         docs_url="/api/docs" if debug else None,
         redoc_url="/api/redoc" if debug else None,
         lifespan=lifespan,

@@ -487,3 +487,123 @@ export async function cyberQuery(request: CyberQueryRequest): Promise<ChatRespon
   })
   return handleResponse(res)
 }
+
+// -----------------------------------------------------------------------------
+// Hybrid Routing (v2.2)
+// -----------------------------------------------------------------------------
+export interface HybridRoutingConfig {
+  enabled: boolean
+  percent_threshold: number
+  local_min_score: number
+  fallback_chain: string[]
+  health_timeout_sec: number
+  health_check_interval_min: number
+  max_retries: number
+  quota_cache_sec: number
+}
+
+export interface ProviderConfig {
+  name: string
+  base_url: string
+  enabled: boolean
+  priority: number
+  models: string[]
+  rate_limits: {
+    rpm?: number
+    tpm?: number
+    rpd?: number
+    tpd?: number
+  }
+  free_tier: {
+    credits_usd?: number
+    requests_per_day?: number
+    tokens_per_day?: number
+  }
+  has_api_key: boolean
+}
+
+export interface LocalRuntime {
+  name: string
+  port: number
+  is_running: boolean
+  models_count: number
+  last_check: string
+}
+
+export interface UsageStats {
+  total_requests: number
+  local_requests: number
+  remote_requests: number
+  by_provider: Record<string, {
+    requests: number
+    tokens_used: number
+    estimated_cost: number
+  }>
+  quotas: Record<string, {
+    used: number
+    limit: number
+    reset_at: string
+  }>
+}
+
+export interface ConsumptionPrediction {
+  role: string
+  provider: string
+  estimated_output_tokens: number
+  estimated_cost_usd: number
+  within_free_tier: boolean
+  recommendation: string
+}
+
+export async function getHybridRoutingConfig(): Promise<HybridRoutingConfig> {
+  const res = await fetch(`${API_BASE}/settings/hybrid-routing`)
+  return handleResponse(res)
+}
+
+export async function getProviders(): Promise<Record<string, ProviderConfig>> {
+  const res = await fetch(`${API_BASE}/settings/providers`)
+  return handleResponse(res)
+}
+
+export async function getProviderHealth(): Promise<Record<string, { healthy: boolean; latency_ms: number; last_check: string }>> {
+  const res = await fetch(`${API_BASE}/settings/provider-health`)
+  return handleResponse(res)
+}
+
+export async function getLocalRuntimes(): Promise<Record<string, LocalRuntime>> {
+  const res = await fetch(`${API_BASE}/settings/local-runtimes`)
+  return handleResponse(res)
+}
+
+export async function detectLocalRuntimes(): Promise<Record<string, LocalRuntime>> {
+  const res = await fetch(`${API_BASE}/settings/local-runtimes/detect`, { method: 'POST' })
+  return handleResponse(res)
+}
+
+export async function getUsageStats(): Promise<UsageStats> {
+  const res = await fetch(`${API_BASE}/settings/usage-stats`)
+  return handleResponse(res)
+}
+
+export async function predictConsumption(role: string, promptTokens = 500, provider = 'local'): Promise<ConsumptionPrediction> {
+  const res = await fetch(`${API_BASE}/settings/predict-consumption`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role, prompt_tokens: promptTokens, provider }),
+  })
+  return handleResponse(res)
+}
+
+export async function updateProviderKey(provider: string, apiKey: string): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/settings/provider-key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, api_key: apiKey }),
+  })
+  return handleResponse(res)
+}
+
+export async function syncBMAD(): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/settings/sync-bmad`, { method: 'POST' })
+  return handleResponse(res)
+}

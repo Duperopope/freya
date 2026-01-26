@@ -1,10 +1,10 @@
-# Freya 2.1
+# Freya 2.2
 
 [![English](https://img.shields.io/badge/Language-English-blue.svg)](README.md) [![Français](https://img.shields.io/badge/Langue-Français-red.svg)](README.fr.md)
 
 [![Built with AI](https://img.shields.io/badge/Built%20with-AI-FF6B6B.svg)](https://github.com/features/copilot) [![AI-Powered](https://img.shields.io/badge/AI--Powered-Yes-9C88FF.svg)](https://ollama.ai) [![Ollama](https://img.shields.io/badge/Powered%20by-Ollama-00ADD8.svg)](https://ollama.ai) [![Llama.cpp](https://img.shields.io/badge/Supports-Llama.cpp-FF6B35.svg)](https://github.com/ggerganov/llama.cpp)
 
-[![Version](https://img.shields.io/badge/Version-2.1.0-green.svg)](#) [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org) [![React](https://img.shields.io/badge/React-18-61DAFB.svg)](https://react.dev) [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688.svg)](https://fastapi.tiangolo.com) [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)](https://typescriptlang.org) [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4+-38BDF8.svg)](https://tailwindcss.com)
+[![Version](https://img.shields.io/badge/Version-2.2.0-green.svg)](#) [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org) [![React](https://img.shields.io/badge/React-18-61DAFB.svg)](https://react.dev) [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688.svg)](https://fastapi.tiangolo.com) [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)](https://typescriptlang.org) [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4+-38BDF8.svg)](https://tailwindcss.com)
 
 ---
 
@@ -15,14 +15,49 @@
 <h3 align="center">BMAD-aligned Multi-Agent Orchestrator for Local LLMs</h3>
 
 <p align="center">
-  <strong>Modern • Real-time • Privacy-First</strong>
+  <strong>Modern • Real-time • Privacy-First • Hybrid Routing</strong>
 </p>
 
 ---
 
-## What's New in 2.1
+## What's New in 2.2
 
-**Freya 2.1** elevates the modern web interface with enhanced features and improved user experience:
+**Freya 2.2** introduces **Hybrid Routing** - intelligent local/remote LLM switching with multi-provider support:
+
+### 🚀 Hybrid Routing System
+
+- **Intelligent Routing** - Automatically routes between local (Ollama, LM Studio, KoboldCpp) and remote providers
+- **Multi-Provider Support** - Groq, Hugging Face, Together AI with automatic quota management
+- **Free Tier Optimization** - Maximizes usage of free tiers before any paid requests
+- **Fallback Chain** - Configurable fallback: local → groq → hf → together
+- **Consumption Prediction** - ML-based prediction of token usage and costs
+
+### 🔧 Enhanced Features
+
+| Feature | Description |
+|---------|-------------|
+| **Providers Dashboard** | New Settings tab for managing all LLM providers |
+| **Usage Statistics** | Track requests, tokens, and costs per provider |
+| **Local Runtime Detection** | Auto-detect Ollama, LM Studio, KoboldCpp, Oobabooga |
+| **API Key Management** | Secure in-session API key configuration |
+| **Benchmark ETA** | Real-time estimated time remaining during benchmarks |
+| **Continuous Mode Fix** | Benchmark auto-advances correctly: Fast → Standard → Advanced |
+
+### 💬 Chat Improvements
+
+- **Web Search Toggle** - Enable/disable web search per message
+- **File Attachments** - Attach code, text, and images to messages
+- **Search Results Display** - See sources used in AI responses
+
+### 🎯 BMAD Studio Fixes
+
+- **Editable Goals** - Goal and project name always editable
+- **Persistent Chat** - Brainstorm chat visible throughout pipeline
+- **Continue Brainstorming** - Resume conversations anytime
+
+---
+
+## What's in 2.1
 
 ### Core Enhancements
 
@@ -32,7 +67,7 @@
 - **Editable Settings** - Full configuration management including custom paths and API integrations
 - **Real-time Auto-refresh** - Configurable auto-refresh with visible timestamps across all dashboards
 
-### New Features
+### Additional Features
 
 | Feature | Description |
 |---------|-------------|

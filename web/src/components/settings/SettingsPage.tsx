@@ -31,13 +31,22 @@ import {
   FolderOpen,
   Moon,
   Sun,
-  Monitor
+  Monitor,
+  Cloud,
+  Zap,
+  Activity,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  TrendingUp,
+  DollarSign,
+  Shield
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import * as api from '../../lib/api'
 
-type SettingsTab = 'paths' | 'ollama' | 'routing' | 'prompts' | 'api' | 'appearance' | 'about'
+type SettingsTab = 'paths' | 'ollama' | 'routing' | 'providers' | 'prompts' | 'api' | 'appearance' | 'about'
 
 interface TabDef {
   id: SettingsTab
@@ -50,6 +59,7 @@ const TABS: TabDef[] = [
   { id: 'paths', name: 'Paths', icon: Folder, description: 'Configure directory paths' },
   { id: 'ollama', name: 'Ollama', icon: Server, description: 'LLM server connection' },
   { id: 'routing', name: 'Model Routing', icon: Brain, description: 'Per-role model assignment' },
+  { id: 'providers', name: 'Providers', icon: Cloud, description: 'Hybrid routing & quotas' },
   { id: 'prompts', name: 'Prompts', icon: FileCode, description: 'System prompts management' },
   { id: 'api', name: 'API Keys', icon: Key, description: 'External API integrations' },
   { id: 'appearance', name: 'Appearance', icon: Palette, description: 'UI preferences' },
@@ -140,6 +150,51 @@ export function SettingsPage() {
   const { data: systemInfo } = useQuery({
     queryKey: ['systemInfo'],
     queryFn: api.getSystemInfo,
+  })
+  
+  // Fetch hybrid routing config (v2.2)
+  const { data: hybridConfig } = useQuery({
+    queryKey: ['hybridRouting'],
+    queryFn: api.getHybridRoutingConfig,
+  })
+  
+  // Fetch providers (v2.2)
+  const { data: providers, refetch: refetchProviders } = useQuery({
+    queryKey: ['providers'],
+    queryFn: api.getProviders,
+  })
+  
+  // Fetch usage stats (v2.2)
+  const { data: usageStats, refetch: refetchUsageStats } = useQuery({
+    queryKey: ['usageStats'],
+    queryFn: api.getUsageStats,
+  })
+  
+  // Fetch local runtimes (v2.2)
+  const { data: localRuntimes, refetch: refetchLocalRuntimes } = useQuery({
+    queryKey: ['localRuntimes'],
+    queryFn: api.getLocalRuntimes,
+  })
+  
+  // Provider key state
+  const [providerKeys, setProviderKeys] = useState<Record<string, string>>({})
+  const [showProviderKey, setShowProviderKey] = useState<Record<string, boolean>>({})
+  
+  // Update provider key mutation
+  const updateProviderKeyMutation = useMutation({
+    mutationFn: ({ provider, apiKey }: { provider: string; apiKey: string }) => 
+      api.updateProviderKey(provider, apiKey),
+    onSuccess: () => {
+      refetchProviders()
+    },
+  })
+  
+  // Detect runtimes mutation
+  const detectRuntimesMutation = useMutation({
+    mutationFn: api.detectLocalRuntimes,
+    onSuccess: () => {
+      refetchLocalRuntimes()
+    },
   })
 
   // Initialize edited paths when paths data loads
@@ -501,6 +556,296 @@ export function SettingsPage() {
                     </div>
                   )
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* Providers Tab (v2.2 Hybrid Routing) */}
+          {activeTab === 'providers' && (
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <h3 className="text-xl font-semibold text-freya-text-primary mb-2">Hybrid Routing & Providers</h3>
+                <p className="text-freya-text-muted">
+                  Configure local/remote LLM routing with multi-provider support and quota management.
+                </p>
+              </div>
+
+              {/* Hybrid Routing Status */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={clsx(
+                      'w-3 h-3 rounded-full',
+                      hybridConfig?.enabled ? 'bg-freya-accent-green animate-pulse' : 'bg-freya-text-muted'
+                    )} />
+                    <h4 className="font-medium text-freya-text-primary">Hybrid Routing</h4>
+                  </div>
+                  <span className={clsx(
+                    'badge',
+                    hybridConfig?.enabled ? 'badge-green' : 'badge-yellow'
+                  )}>
+                    {hybridConfig?.enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+                
+                {hybridConfig && (
+                  <div className="grid grid-cols-4 gap-4 text-sm">
+                    <div className="p-3 bg-freya-bg-primary rounded-lg">
+                      <div className="text-freya-text-muted mb-1">Threshold</div>
+                      <div className="font-medium text-freya-text-primary">
+                        {((hybridConfig.percent_threshold - 1) * 100).toFixed(0)}% better
+                      </div>
+                    </div>
+                    <div className="p-3 bg-freya-bg-primary rounded-lg">
+                      <div className="text-freya-text-muted mb-1">Local Min Score</div>
+                      <div className="font-medium text-freya-text-primary">{hybridConfig.local_min_score}</div>
+                    </div>
+                    <div className="p-3 bg-freya-bg-primary rounded-lg">
+                      <div className="text-freya-text-muted mb-1">Fallback Chain</div>
+                      <div className="font-medium text-freya-accent-cyan text-xs">
+                        {hybridConfig.fallback_chain.join(' → ')}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-freya-bg-primary rounded-lg">
+                      <div className="text-freya-text-muted mb-1">Max Retries</div>
+                      <div className="font-medium text-freya-text-primary">{hybridConfig.max_retries}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Local Runtimes */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-medium text-freya-text-primary flex items-center gap-2">
+                    <Server className="w-5 h-5 text-freya-accent-blue" />
+                    Local Runtimes
+                  </h4>
+                  <button
+                    onClick={() => detectRuntimesMutation.mutate()}
+                    disabled={detectRuntimesMutation.isPending}
+                    className="btn-secondary text-sm flex items-center gap-2"
+                  >
+                    <RefreshCw className={clsx('w-4 h-4', detectRuntimesMutation.isPending && 'animate-spin')} />
+                    Detect
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  {localRuntimes && Object.entries(localRuntimes).map(([id, runtime]) => (
+                    <div key={id} className="flex items-center justify-between p-3 bg-freya-bg-primary rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className={clsx(
+                          'w-2 h-2 rounded-full',
+                          runtime.is_running ? 'bg-freya-accent-green' : 'bg-freya-accent-red'
+                        )} />
+                        <div>
+                          <div className="font-medium text-freya-text-primary">{runtime.name}</div>
+                          <div className="text-xs text-freya-text-muted">Port {runtime.port}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        {runtime.is_running ? (
+                          <span className="text-sm text-freya-accent-green">{runtime.models_count} models</span>
+                        ) : (
+                          <span className="text-sm text-freya-text-muted">Offline</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {(!localRuntimes || Object.keys(localRuntimes).length === 0) && (
+                    <div className="col-span-2 text-center py-4 text-freya-text-muted">
+                      Click "Detect" to scan for local LLM runtimes
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Remote Providers */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-medium text-freya-text-primary flex items-center gap-2">
+                    <Cloud className="w-5 h-5 text-freya-accent-purple" />
+                    Remote Providers
+                  </h4>
+                  <button
+                    onClick={() => refetchProviders()}
+                    className="btn-ghost text-sm"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+                
+                <div className="space-y-3">
+                  {providers && Object.entries(providers).map(([id, provider]) => (
+                    <div key={id} className="p-4 bg-freya-bg-primary rounded-lg border border-freya-border">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={clsx(
+                            'w-10 h-10 rounded-lg flex items-center justify-center',
+                            provider.enabled && provider.has_api_key 
+                              ? 'bg-freya-accent-green/20' 
+                              : 'bg-freya-bg-tertiary'
+                          )}>
+                            {provider.has_api_key ? (
+                              <CheckCircle2 className="w-5 h-5 text-freya-accent-green" />
+                            ) : (
+                              <AlertCircle className="w-5 h-5 text-freya-text-muted" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="font-medium text-freya-text-primary">{provider.name}</div>
+                            <div className="text-xs text-freya-text-muted">Priority: {provider.priority}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {provider.free_tier?.credits_usd && (
+                            <span className="badge badge-green">
+                              ${provider.free_tier.credits_usd} free
+                            </span>
+                          )}
+                          <span className={clsx(
+                            'badge',
+                            provider.enabled ? 'badge-blue' : 'badge-yellow'
+                          )}>
+                            {provider.enabled ? 'Enabled' : 'Disabled'}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* API Key Input */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <input
+                          type={showProviderKey[id] ? 'text' : 'password'}
+                          value={providerKeys[id] || ''}
+                          onChange={(e) => setProviderKeys(prev => ({ ...prev, [id]: e.target.value }))}
+                          placeholder={provider.has_api_key ? '••••••••••••••••' : 'Enter API key...'}
+                          className="input flex-1 font-mono text-sm"
+                        />
+                        <button
+                          onClick={() => setShowProviderKey(prev => ({ ...prev, [id]: !prev[id] }))}
+                          className="btn-ghost px-2"
+                        >
+                          {showProviderKey[id] ? 'Hide' : 'Show'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (providerKeys[id]) {
+                              updateProviderKeyMutation.mutate({ provider: id, apiKey: providerKeys[id] })
+                              setProviderKeys(prev => ({ ...prev, [id]: '' }))
+                            }
+                          }}
+                          disabled={!providerKeys[id] || updateProviderKeyMutation.isPending}
+                          className="btn-primary px-3"
+                        >
+                          <Save className="w-4 h-4" />
+                        </button>
+                      </div>
+                      
+                      {/* Rate Limits */}
+                      {provider.rate_limits && (
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          {provider.rate_limits.rpm && (
+                            <span className="px-2 py-1 bg-freya-bg-tertiary rounded text-freya-text-muted">
+                              {provider.rate_limits.rpm} RPM
+                            </span>
+                          )}
+                          {provider.rate_limits.tpm && (
+                            <span className="px-2 py-1 bg-freya-bg-tertiary rounded text-freya-text-muted">
+                              {(provider.rate_limits.tpm / 1000).toFixed(0)}K TPM
+                            </span>
+                          )}
+                          {provider.rate_limits.rpd && (
+                            <span className="px-2 py-1 bg-freya-bg-tertiary rounded text-freya-text-muted">
+                              {(provider.rate_limits.rpd / 1000).toFixed(1)}K RPD
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Available Models */}
+                      {provider.models && provider.models.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-freya-border">
+                          <div className="text-xs text-freya-text-muted mb-2">Available Models:</div>
+                          <div className="flex flex-wrap gap-1">
+                            {provider.models.slice(0, 5).map(model => (
+                              <span key={model} className="badge badge-blue text-xs">{model}</span>
+                            ))}
+                            {provider.models.length > 5 && (
+                              <span className="badge badge-purple text-xs">+{provider.models.length - 5} more</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Usage Statistics */}
+              {usageStats && (
+                <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="font-medium text-freya-text-primary flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-freya-accent-cyan" />
+                      Usage Statistics
+                    </h4>
+                    <button onClick={() => refetchUsageStats()} className="btn-ghost text-sm">
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div className="p-3 bg-freya-bg-primary rounded-lg text-center">
+                      <div className="text-2xl font-bold text-freya-text-primary">{usageStats.total_requests}</div>
+                      <div className="text-xs text-freya-text-muted">Total Requests</div>
+                    </div>
+                    <div className="p-3 bg-freya-bg-primary rounded-lg text-center">
+                      <div className="text-2xl font-bold text-freya-accent-green">{usageStats.local_requests}</div>
+                      <div className="text-xs text-freya-text-muted">Local</div>
+                    </div>
+                    <div className="p-3 bg-freya-bg-primary rounded-lg text-center">
+                      <div className="text-2xl font-bold text-freya-accent-purple">{usageStats.remote_requests}</div>
+                      <div className="text-xs text-freya-text-muted">Remote</div>
+                    </div>
+                  </div>
+                  
+                  {/* Per-provider breakdown */}
+                  {usageStats.by_provider && Object.keys(usageStats.by_provider).length > 0 && (
+                    <div className="space-y-2">
+                      {Object.entries(usageStats.by_provider).map(([provider, stats]) => (
+                        <div key={provider} className="flex items-center justify-between p-2 bg-freya-bg-primary rounded">
+                          <span className="text-sm text-freya-text-primary capitalize">{provider}</span>
+                          <div className="flex items-center gap-4 text-xs text-freya-text-muted">
+                            <span>{stats.requests} requests</span>
+                            <span>{(stats.tokens_used / 1000).toFixed(1)}K tokens</span>
+                            {stats.estimated_cost > 0 && (
+                              <span className="text-freya-accent-yellow">
+                                ${stats.estimated_cost.toFixed(4)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Info Box */}
+              <div className="p-4 bg-freya-bg-tertiary rounded-lg border border-freya-border">
+                <div className="flex items-start gap-3">
+                  <Info className="w-5 h-5 text-freya-accent-blue mt-0.5" />
+                  <div className="text-sm text-freya-text-secondary">
+                    <p className="font-medium text-freya-text-primary mb-1">Hybrid Routing Logic</p>
+                    <p>
+                      Freya routes requests to the best available provider: 1) Check local availability and score;
+                      2) If local score ≥ {hybridConfig?.local_min_score || 70}, use local; 3) Otherwise, try remote providers
+                      in fallback order if they're {((hybridConfig?.percent_threshold || 1.2) - 1) * 100}%+ better;
+                      4) Respect quotas and rate limits automatically.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
