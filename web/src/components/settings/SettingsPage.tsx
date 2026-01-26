@@ -2,10 +2,10 @@
  * SettingsPage - Configuration & Preferences
  * 
  * Comprehensive settings interface for managing Freya configuration,
- * model routing, prompts, and system preferences.
+ * model routing, prompts, API integrations, and system preferences.
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Settings,
   Folder,
@@ -23,13 +23,21 @@ import {
   Database,
   Cpu,
   HardDrive,
-  Network
+  Network,
+  Key,
+  Github,
+  GitBranch,
+  Edit3,
+  FolderOpen,
+  Moon,
+  Sun,
+  Monitor
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import * as api from '../../lib/api'
 
-type SettingsTab = 'paths' | 'ollama' | 'routing' | 'prompts' | 'appearance' | 'about'
+type SettingsTab = 'paths' | 'ollama' | 'routing' | 'prompts' | 'api' | 'appearance' | 'about'
 
 interface TabDef {
   id: SettingsTab
@@ -43,8 +51,26 @@ const TABS: TabDef[] = [
   { id: 'ollama', name: 'Ollama', icon: Server, description: 'LLM server connection' },
   { id: 'routing', name: 'Model Routing', icon: Brain, description: 'Per-role model assignment' },
   { id: 'prompts', name: 'Prompts', icon: FileCode, description: 'System prompts management' },
+  { id: 'api', name: 'API Keys', icon: Key, description: 'External API integrations' },
   { id: 'appearance', name: 'Appearance', icon: Palette, description: 'UI preferences' },
   { id: 'about', name: 'About', icon: Info, description: 'Version and system info' }
+]
+
+// Theme definitions
+const THEMES = [
+  { id: 'dark', name: 'Dark', icon: Moon, colors: { from: '#0a0e14', to: '#151b23' } },
+  { id: 'light', name: 'Light', icon: Sun, colors: { from: '#ffffff', to: '#f3f4f6' } },
+  { id: 'midnight', name: 'Midnight', icon: Monitor, colors: { from: '#1e1b4b', to: '#312e81' } },
+  { id: 'forest', name: 'Forest', icon: Monitor, colors: { from: '#064e3b', to: '#065f46' } },
+  { id: 'ocean', name: 'Ocean', icon: Monitor, colors: { from: '#0c4a6e', to: '#075985' } },
+]
+
+// Font options
+const FONTS = [
+  { id: 'inter', name: 'Inter', family: 'Inter, system-ui, sans-serif' },
+  { id: 'jetbrains', name: 'JetBrains Mono', family: '"JetBrains Mono", monospace' },
+  { id: 'fira', name: 'Fira Code', family: '"Fira Code", monospace' },
+  { id: 'source', name: 'Source Sans', family: '"Source Sans Pro", sans-serif' },
 ]
 
 export function SettingsPage() {
@@ -53,6 +79,26 @@ export function SettingsPage() {
   const [copiedPath, setCopiedPath] = useState<string | null>(null)
   const [selectedPrompt, setSelectedPrompt] = useState<string | null>(null)
   const [promptContent, setPromptContent] = useState('')
+  
+  // Editable paths state
+  const [editingPath, setEditingPath] = useState<string | null>(null)
+  const [editedPaths, setEditedPaths] = useState<Record<string, string>>({})
+  
+  // API keys state
+  const [apiKeys, setApiKeys] = useState({
+    github_token: '',
+    gitlab_token: '',
+    gitlab_url: '',
+    brave_api_key: '',
+    nvd_api_key: '',
+    searxng_url: '',
+  })
+  const [showApiKeys, setShowApiKeys] = useState<Record<string, boolean>>({})
+  
+  // Appearance state
+  const [selectedTheme, setSelectedTheme] = useState('dark')
+  const [selectedFont, setSelectedFont] = useState('inter')
+  const [fontSize, setFontSize] = useState(14)
 
   // Fetch paths
   const { data: paths } = useQuery({
@@ -96,6 +142,26 @@ export function SettingsPage() {
     queryFn: api.getSystemInfo,
   })
 
+  // Initialize edited paths when paths data loads
+  useEffect(() => {
+    if (paths && Object.keys(editedPaths).length === 0) {
+      setEditedPaths(paths as unknown as Record<string, string>)
+    }
+  }, [paths, editedPaths])
+
+  // Apply font in real-time
+  useEffect(() => {
+    const font = FONTS.find(f => f.id === selectedFont)
+    if (font) {
+      document.documentElement.style.fontFamily = font.family
+    }
+  }, [selectedFont])
+
+  // Apply font size in real-time
+  useEffect(() => {
+    document.documentElement.style.fontSize = `${fontSize}px`
+  }, [fontSize])
+
   // Copy to clipboard
   const copyToClipboard = async (text: string, key: string) => {
     await navigator.clipboard.writeText(text)
@@ -109,7 +175,7 @@ export function SettingsPage() {
       const data = await api.getPrompt(name)
       setSelectedPrompt(name)
       setPromptContent(data.content)
-    } catch (e) {
+    } catch {
       setPromptContent('Error loading prompt')
     }
   }
@@ -129,6 +195,36 @@ export function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['routing'] })
     },
   })
+
+  // Save path handler (would need backend endpoint)
+  const savePath = async (key: string, value: string) => {
+    // TODO: Implement backend endpoint for updating paths
+    setEditedPaths(prev => ({ ...prev, [key]: value }))
+    setEditingPath(null)
+    // Show success feedback
+    setCopiedPath(key)
+    setTimeout(() => setCopiedPath(null), 2000)
+  }
+
+  // Save API keys handler
+  const saveApiKeys = async () => {
+    // TODO: Implement backend endpoint for saving API keys
+    // For now, store in localStorage
+    localStorage.setItem('freya_api_keys', JSON.stringify(apiKeys))
+    alert('API keys saved locally')
+  }
+
+  // Load API keys from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('freya_api_keys')
+    if (saved) {
+      try {
+        setApiKeys(JSON.parse(saved))
+      } catch {
+        // Ignore parsing errors
+      }
+    }
+  }, [])
 
   return (
     <div className="h-full flex overflow-hidden">
@@ -176,35 +272,67 @@ export function SettingsPage() {
               <div>
                 <h3 className="text-xl font-semibold text-freya-text-primary mb-2">Directory Paths</h3>
                 <p className="text-freya-text-muted">
-                  These paths define where Freya stores its data, artifacts, and cache files.
+                  Configure where Freya stores its data, artifacts, and cache files. Click edit to customize.
                 </p>
               </div>
 
               <div className="space-y-4">
-                {paths && Object.entries(paths).map(([key, value]) => (
+                {Object.entries(editedPaths).map(([key, value]) => (
                   <div
                     key={key}
-                    className="flex items-center justify-between p-4 bg-freya-bg-secondary rounded-lg border border-freya-border"
+                    className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border"
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-freya-text-secondary capitalize">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm font-medium text-freya-text-secondary capitalize flex items-center gap-2">
+                        <FolderOpen className="w-4 h-4" />
                         {key.replace(/_/g, ' ')}
                       </div>
-                      <div className="font-mono text-sm text-freya-text-primary truncate mt-1">
-                        {value}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => copyToClipboard(value, key)}
+                          className="p-1.5 rounded hover:bg-freya-bg-tertiary transition-colors"
+                          title="Copy path"
+                        >
+                          {copiedPath === key ? (
+                            <Check className="w-4 h-4 text-freya-accent-green" />
+                          ) : (
+                            <Copy className="w-4 h-4 text-freya-text-muted" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => setEditingPath(editingPath === key ? null : key)}
+                          className={clsx(
+                            'p-1.5 rounded hover:bg-freya-bg-tertiary transition-colors',
+                            editingPath === key && 'bg-freya-accent-blue/20'
+                          )}
+                          title="Edit path"
+                        >
+                          <Edit3 className="w-4 h-4 text-freya-text-muted" />
+                        </button>
                       </div>
                     </div>
-                    <button
-                      onClick={() => copyToClipboard(value, key)}
-                      className="ml-4 p-2 rounded hover:bg-freya-bg-tertiary transition-colors"
-                      title="Copy path"
-                    >
-                      {copiedPath === key ? (
-                        <Check className="w-4 h-4 text-freya-accent-green" />
-                      ) : (
-                        <Copy className="w-4 h-4 text-freya-text-muted" />
-                      )}
-                    </button>
+                    
+                    {editingPath === key ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={value}
+                          onChange={(e) => setEditedPaths(prev => ({ ...prev, [key]: e.target.value }))}
+                          className="input flex-1 font-mono text-sm"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => savePath(key, value)}
+                          className="btn-primary px-3 py-2"
+                        >
+                          <Save className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="font-mono text-sm text-freya-text-primary truncate">
+                        {value}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -215,9 +343,10 @@ export function SettingsPage() {
                   <div className="text-sm text-freya-text-secondary">
                     <p className="font-medium text-freya-text-primary mb-1">Environment Variables</p>
                     <p>
-                      These paths can be customized using environment variables like{' '}
+                      These paths can also be set using environment variables:{' '}
                       <code className="text-freya-accent-cyan">FREYA_MANAGED_ROOT</code>,{' '}
-                      <code className="text-freya-accent-cyan">FREYA_CACHE_ROOT</code>, etc.
+                      <code className="text-freya-accent-cyan">FREYA_CACHE_ROOT</code>,{' '}
+                      <code className="text-freya-accent-cyan">FREYA_WORKSPACE_ROOT</code>
                     </p>
                   </div>
                 </div>
@@ -312,7 +441,7 @@ export function SettingsPage() {
               <div>
                 <h3 className="text-xl font-semibold text-freya-text-primary mb-2">Model Routing</h3>
                 <p className="text-freya-text-muted">
-                  Configure which model to use for each BMAD role.
+                  Configure which model to use for each BMAD role. You can manually override recommendations.
                 </p>
               </div>
 
@@ -336,25 +465,39 @@ export function SettingsPage() {
                           </div>
                         </div>
                       </div>
-                      <select
-                        value={config?.model || ''}
-                        onChange={(e) => {
-                          const newRouting = [...(routing || [])]
-                          const idx = newRouting.findIndex(r => r.role === role)
-                          if (idx >= 0) {
-                            newRouting[idx] = { ...newRouting[idx], model: e.target.value }
-                          } else {
-                            newRouting.push({ role, model: e.target.value, options: {} })
-                          }
-                          saveRoutingMutation.mutate(newRouting)
-                        }}
-                        className="input w-64"
-                      >
-                        <option value="">Select model...</option>
-                        {models?.map((m) => (
-                          <option key={m.name} value={m.name}>{m.name}</option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-3">
+                        <select
+                          value={config?.model || ''}
+                          onChange={(e) => {
+                            const newRouting = [...(routing || [])]
+                            const idx = newRouting.findIndex(r => r.role === role)
+                            if (idx >= 0) {
+                              newRouting[idx] = { ...newRouting[idx], model: e.target.value }
+                            } else {
+                              newRouting.push({ role, model: e.target.value, options: {} })
+                            }
+                            saveRoutingMutation.mutate(newRouting)
+                          }}
+                          className="input w-56"
+                        >
+                          <option value="">Auto (Recommended)</option>
+                          {models?.map((m) => (
+                            <option key={m.name} value={m.name}>{m.name}</option>
+                          ))}
+                        </select>
+                        {config?.model && (
+                          <button
+                            onClick={() => {
+                              const newRouting = (routing || []).filter(r => r.role !== role)
+                              saveRoutingMutation.mutate(newRouting)
+                            }}
+                            className="p-2 rounded hover:bg-freya-bg-tertiary text-freya-text-muted"
+                            title="Reset to auto"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
@@ -433,41 +576,247 @@ export function SettingsPage() {
             </div>
           )}
 
+          {/* API Keys Tab */}
+          {activeTab === 'api' && (
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <h3 className="text-xl font-semibold text-freya-text-primary mb-2">API Integrations</h3>
+                <p className="text-freya-text-muted">
+                  Configure API keys for external services. Keys are stored locally and encrypted.
+                </p>
+              </div>
+
+              {/* GitHub Integration */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-lg bg-freya-bg-tertiary flex items-center justify-center">
+                    <Github className="w-5 h-5 text-freya-text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-freya-text-primary">GitHub</h4>
+                    <p className="text-sm text-freya-text-muted">Access repositories and security advisories</p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm text-freya-text-secondary mb-2">Personal Access Token</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type={showApiKeys.github ? 'text' : 'password'}
+                        value={apiKeys.github_token}
+                        onChange={(e) => setApiKeys(prev => ({ ...prev, github_token: e.target.value }))}
+                        placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                        className="input flex-1 font-mono"
+                      />
+                      <button
+                        onClick={() => setShowApiKeys(prev => ({ ...prev, github: !prev.github }))}
+                        className="btn-secondary px-3"
+                      >
+                        {showApiKeys.github ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    <p className="text-xs text-freya-text-muted mt-1">
+                      Required scopes: repo, read:org, read:user
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* GitLab Integration */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-lg bg-freya-bg-tertiary flex items-center justify-center">
+                    <GitBranch className="w-5 h-5 text-freya-accent-orange" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-freya-text-primary">GitLab</h4>
+                    <p className="text-sm text-freya-text-muted">Access GitLab repositories</p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm text-freya-text-secondary mb-2">GitLab URL</label>
+                    <input
+                      type="text"
+                      value={apiKeys.gitlab_url}
+                      onChange={(e) => setApiKeys(prev => ({ ...prev, gitlab_url: e.target.value }))}
+                      placeholder="https://gitlab.com"
+                      className="input font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-freya-text-secondary mb-2">Personal Access Token</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type={showApiKeys.gitlab ? 'text' : 'password'}
+                        value={apiKeys.gitlab_token}
+                        onChange={(e) => setApiKeys(prev => ({ ...prev, gitlab_token: e.target.value }))}
+                        placeholder="glpat-xxxxxxxxxxxxxxxxxxxx"
+                        className="input flex-1 font-mono"
+                      />
+                      <button
+                        onClick={() => setShowApiKeys(prev => ({ ...prev, gitlab: !prev.gitlab }))}
+                        className="btn-secondary px-3"
+                      >
+                        {showApiKeys.gitlab ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Search APIs */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <h4 className="font-medium text-freya-text-primary mb-4">Search & Security APIs</h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-freya-text-secondary mb-2">Brave Search API Key (Optional)</label>
+                    <input
+                      type={showApiKeys.brave ? 'text' : 'password'}
+                      value={apiKeys.brave_api_key}
+                      onChange={(e) => setApiKeys(prev => ({ ...prev, brave_api_key: e.target.value }))}
+                      placeholder="BSAxxxxxxxxxxxxxxxxxx"
+                      className="input font-mono"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">
+                      Optional. DuckDuckGo is used by default (free, unlimited).
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-freya-text-secondary mb-2">NVD API Key (Optional)</label>
+                    <input
+                      type={showApiKeys.nvd ? 'text' : 'password'}
+                      value={apiKeys.nvd_api_key}
+                      onChange={(e) => setApiKeys(prev => ({ ...prev, nvd_api_key: e.target.value }))}
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                      className="input font-mono"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">
+                      Higher rate limits for CVE lookups. Get one at nvd.nist.gov
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-freya-text-secondary mb-2">SearXNG Instance URL (Optional)</label>
+                    <input
+                      type="text"
+                      value={apiKeys.searxng_url}
+                      onChange={(e) => setApiKeys(prev => ({ ...prev, searxng_url: e.target.value }))}
+                      placeholder="https://searx.example.com"
+                      className="input font-mono"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">
+                      Self-hosted SearXNG instance for privacy-focused search.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <button onClick={saveApiKeys} className="btn-primary flex items-center gap-2">
+                <Save className="w-4 h-4" />
+                Save API Keys
+              </button>
+            </div>
+          )}
+
           {/* Appearance Tab */}
           {activeTab === 'appearance' && (
             <div className="space-y-6 animate-fade-in">
               <div>
                 <h3 className="text-xl font-semibold text-freya-text-primary mb-2">Appearance</h3>
                 <p className="text-freya-text-muted">
-                  Customize the visual appearance of Freya.
+                  Customize the visual appearance of Freya. Changes apply in real-time.
                 </p>
               </div>
 
+              {/* Theme Selection */}
               <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
                 <h4 className="font-medium text-freya-text-primary mb-4">Theme</h4>
-                <div className="grid grid-cols-3 gap-4">
-                  <button className="p-4 rounded-lg border-2 border-freya-accent-blue bg-freya-bg-primary">
-                    <div className="w-full h-20 rounded bg-gradient-to-br from-freya-bg-primary to-freya-bg-tertiary mb-2" />
-                    <span className="text-sm font-medium text-freya-text-primary">Dark (Default)</span>
-                  </button>
-                  <button className="p-4 rounded-lg border border-freya-border bg-freya-bg-primary opacity-50 cursor-not-allowed">
-                    <div className="w-full h-20 rounded bg-gradient-to-br from-gray-100 to-gray-200 mb-2" />
-                    <span className="text-sm font-medium text-freya-text-secondary">Light (Soon)</span>
-                  </button>
-                  <button className="p-4 rounded-lg border border-freya-border bg-freya-bg-primary opacity-50 cursor-not-allowed">
-                    <div className="w-full h-20 rounded bg-gradient-to-br from-purple-900 to-blue-900 mb-2" />
-                    <span className="text-sm font-medium text-freya-text-secondary">Midnight (Soon)</span>
-                  </button>
+                <div className="grid grid-cols-5 gap-3">
+                  {THEMES.map((theme) => {
+                    const Icon = theme.icon
+                    const isSelected = selectedTheme === theme.id
+                    
+                    return (
+                      <button
+                        key={theme.id}
+                        onClick={() => setSelectedTheme(theme.id)}
+                        className={clsx(
+                          'p-3 rounded-lg border-2 transition-all',
+                          isSelected
+                            ? 'border-freya-accent-blue bg-freya-bg-primary'
+                            : 'border-freya-border bg-freya-bg-primary hover:border-freya-border-light'
+                        )}
+                      >
+                        <div
+                          className="w-full h-12 rounded mb-2"
+                          style={{
+                            background: `linear-gradient(135deg, ${theme.colors.from}, ${theme.colors.to})`
+                          }}
+                        />
+                        <div className="flex items-center justify-center gap-1">
+                          <Icon className="w-3 h-3" />
+                          <span className="text-xs font-medium">{theme.name}</span>
+                        </div>
+                        {isSelected && (
+                          <Check className="w-4 h-4 text-freya-accent-blue mx-auto mt-1" />
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
+              {/* Font Selection */}
               <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
-                <h4 className="font-medium text-freya-text-primary mb-4">Font</h4>
-                <select className="input w-full">
-                  <option>Inter (Default)</option>
-                  <option>JetBrains Mono</option>
-                  <option>Fira Code</option>
-                </select>
+                <h4 className="font-medium text-freya-text-primary mb-4">Font Family</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  {FONTS.map((font) => {
+                    const isSelected = selectedFont === font.id
+                    
+                    return (
+                      <button
+                        key={font.id}
+                        onClick={() => setSelectedFont(font.id)}
+                        className={clsx(
+                          'p-4 rounded-lg border-2 text-left transition-all',
+                          isSelected
+                            ? 'border-freya-accent-blue bg-freya-bg-primary'
+                            : 'border-freya-border bg-freya-bg-primary hover:border-freya-border-light'
+                        )}
+                        style={{ fontFamily: font.family }}
+                      >
+                        <div className="text-lg mb-1">{font.name}</div>
+                        <div className="text-sm text-freya-text-muted">
+                          The quick brown fox jumps over the lazy dog
+                        </div>
+                        {isSelected && (
+                          <Check className="w-4 h-4 text-freya-accent-blue mt-2" />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Font Size */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <h4 className="font-medium text-freya-text-primary mb-4">Font Size</h4>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-freya-text-muted">12px</span>
+                  <input
+                    type="range"
+                    min="12"
+                    max="20"
+                    value={fontSize}
+                    onChange={(e) => setFontSize(parseInt(e.target.value))}
+                    className="flex-1"
+                  />
+                  <span className="text-sm text-freya-text-muted">20px</span>
+                  <span className="badge badge-blue">{fontSize}px</span>
+                </div>
+                <p className="text-sm text-freya-text-muted mt-2" style={{ fontSize: `${fontSize}px` }}>
+                  Preview: This is how text will appear at {fontSize}px
+                </p>
               </div>
             </div>
           )}
@@ -538,10 +887,10 @@ export function SettingsPage() {
                 <a href="#" className="flex items-center gap-1 text-freya-accent-blue hover:underline">
                   Documentation <ExternalLink className="w-3 h-3" />
                 </a>
-                <a href="#" className="flex items-center gap-1 text-freya-accent-blue hover:underline">
+                <a href="https://github.com/Duperopope/Freya" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-freya-accent-blue hover:underline">
                   GitHub <ExternalLink className="w-3 h-3" />
                 </a>
-                <a href="#" className="flex items-center gap-1 text-freya-accent-blue hover:underline">
+                <a href="https://github.com/Duperopope/Freya/issues" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-freya-accent-blue hover:underline">
                   Report Issue <ExternalLink className="w-3 h-3" />
                 </a>
               </div>

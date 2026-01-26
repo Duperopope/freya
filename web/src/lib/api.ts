@@ -65,6 +65,7 @@ export interface ChatRequest {
   hat?: string
   temperature?: number
   max_tokens?: number
+  web_search?: boolean
 }
 
 export interface ChatResponse {
@@ -72,6 +73,7 @@ export interface ChatResponse {
   model: string
   duration_ms: number
   tokens_estimated?: number
+  search_results?: SearchResult[]
 }
 
 export interface HatPreset {
@@ -101,9 +103,11 @@ export async function getHats(): Promise<HatPreset[]> {
   return handleResponse(res)
 }
 
-export async function webSearch(query: string, limit = 5): Promise<SearchResult[]> {
-  const res = await fetch(`${API_BASE}/chat/search?query=${encodeURIComponent(query)}&limit=${limit}`, {
+export async function webSearch(query: string, count = 5, provider = 'duckduckgo'): Promise<SearchResult[]> {
+  const res = await fetch(`${API_BASE}/chat/search`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, count, provider }),
   })
   return handleResponse(res)
 }
@@ -132,6 +136,7 @@ export interface BenchResult {
   score: number
   latency_ms: number
   status: string
+  details?: Record<string, unknown>
 }
 
 export interface BillboardEntry {
@@ -326,6 +331,16 @@ export interface WatchItem {
   published: string
   cve?: string
   severity?: string
+  description?: string
+  tags?: string[]
+}
+
+export interface WatchFeed {
+  source: string
+  items: WatchItem[]
+  fetched_at: string
+  cached: boolean
+  item_count: number
 }
 
 export interface CVEInfo {
@@ -337,23 +352,71 @@ export interface CVEInfo {
   affected_products: string[]
 }
 
-export async function getWatchFeed(limit = 25): Promise<WatchItem[]> {
-  const res = await fetch(`${API_BASE}/watch/?limit=${limit}`)
+export interface WatchStats {
+  cache_dir: string
+  config: {
+    auto_refresh: boolean
+    refresh_interval_minutes: number
+    enabled_sources: string[]
+  }
+  sources: Record<string, {
+    last_fetch: string | null
+    item_count: number
+    cache_age_minutes: number
+    is_stale: boolean
+  }>
+}
+
+export async function getWatchFeed(limit = 50, sources?: string): Promise<WatchItem[]> {
+  let url = `${API_BASE}/watch/?limit=${limit}`
+  if (sources) {
+    url += `&sources=${encodeURIComponent(sources)}`
+  }
+  const res = await fetch(url)
   return handleResponse(res)
 }
 
-export async function getCISAKEV(limit = 50): Promise<{ items: WatchItem[] }> {
+export async function getCISAKEV(limit = 50): Promise<WatchFeed> {
   const res = await fetch(`${API_BASE}/watch/cisa-kev?limit=${limit}`)
   return handleResponse(res)
 }
 
-export async function getCERTFR(limit = 30): Promise<{ items: WatchItem[] }> {
+export async function getCERTFR(limit = 30): Promise<WatchFeed> {
   const res = await fetch(`${API_BASE}/watch/cert-fr?limit=${limit}`)
+  return handleResponse(res)
+}
+
+export async function getNVDRecent(limit = 50, days = 7): Promise<WatchFeed> {
+  const res = await fetch(`${API_BASE}/watch/nvd?limit=${limit}&days=${days}`)
+  return handleResponse(res)
+}
+
+export async function getExploitDB(limit = 30): Promise<WatchFeed> {
+  const res = await fetch(`${API_BASE}/watch/exploitdb?limit=${limit}`)
+  return handleResponse(res)
+}
+
+export async function getGitHubAdvisories(limit = 30): Promise<WatchFeed> {
+  const res = await fetch(`${API_BASE}/watch/github?limit=${limit}`)
   return handleResponse(res)
 }
 
 export async function lookupCVE(cveId: string): Promise<CVEInfo> {
   const res = await fetch(`${API_BASE}/watch/cve/${encodeURIComponent(cveId)}`)
+  return handleResponse(res)
+}
+
+export async function getWatchStats(): Promise<WatchStats> {
+  const res = await fetch(`${API_BASE}/watch/stats`)
+  return handleResponse(res)
+}
+
+export async function forceRefreshWatch(sources?: string): Promise<{ status: string; cleared_caches: string[] }> {
+  let url = `${API_BASE}/watch/refresh`
+  if (sources) {
+    url += `?sources=${encodeURIComponent(sources)}`
+  }
+  const res = await fetch(url, { method: 'POST' })
   return handleResponse(res)
 }
 

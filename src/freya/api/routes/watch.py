@@ -4,15 +4,19 @@ Cyber Watch API Routes
 
 Endpoints for security monitoring:
 - CISA KEV (Known Exploited Vulnerabilities)
-- CERT-FR alerts
+- CERT-FR alerts (ANSSI)
+- NVD recent CVEs
+- Exploit-DB
+- GitHub Security Advisories
 - CVE search
-- Custom RSS feeds
+- Real-time statistics
 """
 
 from __future__ import annotations
 
 import json
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +38,7 @@ class WatchItem(BaseModel):
     cve: str | None = None
     severity: str | None = None
     description: str | None = None
+    tags: list[str] = []
 
 
 class WatchFeed(BaseModel):
@@ -42,6 +47,7 @@ class WatchFeed(BaseModel):
     items: list[WatchItem]
     fetched_at: str
     cached: bool
+    item_count: int
 
 
 class CVEInfo(BaseModel):
@@ -54,15 +60,59 @@ class CVEInfo(BaseModel):
     affected_products: list[str] = []
 
 
+class WatchStats(BaseModel):
+    """Watch statistics."""
+    source: str
+    last_fetch: str | None
+    item_count: int
+    cache_age_minutes: float
+    is_stale: bool
+
+
+class WatchConfig(BaseModel):
+    """Watch configuration."""
+    auto_refresh: bool = True
+    refresh_interval_minutes: int = 30
+    enabled_sources: list[str] = ["cisa", "certfr", "nvd", "exploitdb", "github"]
+
+
+# Global config (in-memory, could be persisted)
+_watch_config = WatchConfig()
+
+
+# -----------------------------------------------------------------------------
+# Helper to convert internal WatchItem to API WatchItem
+# -----------------------------------------------------------------------------
+def _to_api_item(item) -> WatchItem:
+    """Convert internal WatchItem to API WatchItem."""
+    return WatchItem(
+        source=item.source,
+        title=item.title,
+        url=item.url,
+        published=item.published,
+        cve=item.cve,
+        severity=getattr(item, 'severity', None),
+        description=getattr(item, 'description', None),
+        tags=getattr(item, 'tags', [])
+    )
+
+
 # -----------------------------------------------------------------------------
 # Endpoints
 # -----------------------------------------------------------------------------
 @router.get("/", response_model=list[WatchItem])
-async def get_watch_feed(request: Request, limit: int = 25) -> list[WatchItem]:
+async def get_watch_feed(
+    request: Request,
+    limit: int = 50,
+    sources: str | None = None
+) -> list[WatchItem]:
     """
     Get combined cyber watch feed.
     
-    Combines CISA KEV and CERT-FR alerts, prioritized by criticality.
+    Args:
+        limit: Maximum items to return (default 50)
+        sources: Comma-separated list of sources (default: all enabled)
+                 Options: cisa, certfr, nvd, exploitdb, github, packetstorm, threatpost
     """
     state = request.app.state.freya
     
@@ -74,18 +124,16 @@ async def get_watch_feed(request: Request, limit: int = 25) -> list[WatchItem]:
     cache_dir = state.config.cache_root / "watch"
     cache_dir.mkdir(parents=True, exist_ok=True)
     
+    # Parse sources
+    source_list = None
+    if sources:
+        source_list = [s.strip().lower() for s in sources.split(",")]
+    else:
+        source_list = _watch_config.enabled_sources
+    
     try:
-        items = cyber_watch(cache_dir)
-        return [
-            WatchItem(
-                source=item.source,
-                title=item.title,
-                url=item.url,
-                published=item.published,
-                cve=item.cve
-            )
-            for item in items[:limit]
-        ]
+        items = cyber_watch(cache_dir, sources=source_list, limit=limit)
+        return [_to_api_item(item) for item in items]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch watch feed: {e}")
 
@@ -111,18 +159,10 @@ async def get_cisa_kev(request: Request, limit: int = 50) -> WatchFeed:
         items = fetch_cisa_kev(cache_dir, ttl_sec=1800)
         return WatchFeed(
             source="CISA-KEV",
-            items=[
-                WatchItem(
-                    source=item.source,
-                    title=item.title,
-                    url=item.url,
-                    published=item.published,
-                    cve=item.cve
-                )
-                for item in items[:limit]
-            ],
-            fetched_at=time.strftime("%Y-%m-%d %H:%M:%S"),
-            cached=True  # Cache TTL is 30 min
+            items=[_to_api_item(item) for item in items[:limit]],
+            fetched_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            cached=True,
+            item_count=len(items)
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch CISA KEV: {e}")
@@ -149,21 +189,130 @@ async def get_cert_fr(request: Request, limit: int = 30) -> WatchFeed:
         items = fetch_certfr_rss(cache_dir, ttl_sec=1800)
         return WatchFeed(
             source="CERT-FR",
-            items=[
-                WatchItem(
-                    source=item.source,
-                    title=item.title,
-                    url=item.url,
-                    published=item.published,
-                    cve=item.cve
-                )
-                for item in items[:limit]
-            ],
-            fetched_at=time.strftime("%Y-%m-%d %H:%M:%S"),
-            cached=True
+            items=[_to_api_item(item) for item in items[:limit]],
+            fetched_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            cached=True,
+            item_count=len(items)
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch CERT-FR: {e}")
+
+
+@router.get("/cert-fr-avis", response_model=WatchFeed)
+async def get_cert_fr_avis(request: Request, limit: int = 30) -> WatchFeed:
+    """
+    Get CERT-FR security advisories (less critical than alerts).
+    
+    Source: https://www.cert.ssi.gouv.fr/avis/feed/
+    """
+    state = request.app.state.freya
+    
+    if not state.ready:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    from ...tools.webwatch import fetch_certfr_avis
+    
+    cache_dir = state.config.cache_root / "watch"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        items = fetch_certfr_avis(cache_dir, ttl_sec=1800)
+        return WatchFeed(
+            source="CERT-FR-Avis",
+            items=[_to_api_item(item) for item in items[:limit]],
+            fetched_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            cached=True,
+            item_count=len(items)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch CERT-FR Avis: {e}")
+
+
+@router.get("/nvd", response_model=WatchFeed)
+async def get_nvd_recent(request: Request, limit: int = 50, days: int = 7) -> WatchFeed:
+    """
+    Get recent CVEs from NVD (National Vulnerability Database).
+    
+    Note: Rate limited without API key.
+    """
+    state = request.app.state.freya
+    
+    if not state.ready:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    from ...tools.webwatch import fetch_nvd_recent
+    
+    cache_dir = state.config.cache_root / "watch"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        items = fetch_nvd_recent(cache_dir, ttl_sec=3600, days=days)
+        return WatchFeed(
+            source="NVD",
+            items=[_to_api_item(item) for item in items[:limit]],
+            fetched_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            cached=True,
+            item_count=len(items)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch NVD: {e}")
+
+
+@router.get("/exploitdb", response_model=WatchFeed)
+async def get_exploitdb(request: Request, limit: int = 30) -> WatchFeed:
+    """
+    Get recent exploits from Exploit-DB.
+    """
+    state = request.app.state.freya
+    
+    if not state.ready:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    from ...tools.webwatch import fetch_exploitdb
+    
+    cache_dir = state.config.cache_root / "watch"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        items = fetch_exploitdb(cache_dir, ttl_sec=3600)
+        return WatchFeed(
+            source="Exploit-DB",
+            items=[_to_api_item(item) for item in items[:limit]],
+            fetched_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            cached=True,
+            item_count=len(items)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch Exploit-DB: {e}")
+
+
+@router.get("/github", response_model=WatchFeed)
+async def get_github_advisories(request: Request, limit: int = 30) -> WatchFeed:
+    """
+    Get GitHub Security Advisories.
+    """
+    state = request.app.state.freya
+    
+    if not state.ready:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    from ...tools.webwatch import fetch_github_advisories
+    
+    cache_dir = state.config.cache_root / "watch"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        # TODO: Get GitHub token from config if available
+        items = fetch_github_advisories(cache_dir, ttl_sec=1800, token="")
+        return WatchFeed(
+            source="GitHub-GHSA",
+            items=[_to_api_item(item) for item in items[:limit]],
+            fetched_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            cached=True,
+            item_count=len(items)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch GitHub advisories: {e}")
 
 
 @router.get("/cve/{cve_id}")
@@ -212,7 +361,6 @@ async def lookup_cve(request: Request, cve_id: str) -> CVEInfo:
         cvss_score = None
         severity = None
         
-        # Try CVSS 3.1 first, then 3.0, then 2.0
         for cvss_key in ["cvssMetricV31", "cvssMetricV30", "cvssMetricV2"]:
             if cvss_key in metrics and metrics[cvss_key]:
                 metric = metrics[cvss_key][0]
@@ -224,9 +372,9 @@ async def lookup_cve(request: Request, cve_id: str) -> CVEInfo:
         # Extract references
         references = []
         for ref in cve_data.get("references", [])[:10]:
-            url = ref.get("url")
-            if url:
-                references.append(url)
+            ref_url = ref.get("url")
+            if ref_url:
+                references.append(ref_url)
         
         # Extract affected products (CPE)
         affected = []
@@ -236,7 +384,6 @@ async def lookup_cve(request: Request, cve_id: str) -> CVEInfo:
                 for match in node.get("cpeMatch", [])[:5]:
                     criteria = match.get("criteria", "")
                     if criteria:
-                        # Extract product name from CPE
                         parts = criteria.split(":")
                         if len(parts) >= 5:
                             vendor = parts[3]
@@ -260,7 +407,65 @@ async def lookup_cve(request: Request, cve_id: str) -> CVEInfo:
 
 @router.get("/stats")
 async def get_watch_stats(request: Request) -> dict[str, Any]:
-    """Get watch statistics and cache status."""
+    """
+    Get watch statistics and cache status.
+    
+    Returns timing information for each source.
+    """
+    state = request.app.state.freya
+    
+    if not state.ready:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    from ...tools.webwatch import get_watch_stats as _get_stats
+    
+    cache_dir = state.config.cache_root / "watch"
+    
+    stats = _get_stats(cache_dir)
+    
+    result = {
+        "cache_dir": str(cache_dir),
+        "config": {
+            "auto_refresh": _watch_config.auto_refresh,
+            "refresh_interval_minutes": _watch_config.refresh_interval_minutes,
+            "enabled_sources": _watch_config.enabled_sources
+        },
+        "sources": {}
+    }
+    
+    for name, stat in stats.items():
+        result["sources"][name] = {
+            "last_fetch": stat.last_fetch.isoformat() if stat.last_fetch else None,
+            "item_count": stat.item_count,
+            "cache_age_minutes": stat.cache_age_minutes,
+            "is_stale": stat.is_stale
+        }
+    
+    return result
+
+
+@router.get("/config", response_model=WatchConfig)
+async def get_watch_config() -> WatchConfig:
+    """Get current watch configuration."""
+    return _watch_config
+
+
+@router.post("/config", response_model=WatchConfig)
+async def update_watch_config(config: WatchConfig) -> WatchConfig:
+    """Update watch configuration."""
+    global _watch_config
+    _watch_config = config
+    return _watch_config
+
+
+@router.post("/refresh")
+async def force_refresh(request: Request, sources: str | None = None) -> dict[str, Any]:
+    """
+    Force refresh of watch feeds (bypasses cache).
+    
+    Args:
+        sources: Comma-separated list of sources to refresh (default: all)
+    """
     state = request.app.state.freya
     
     if not state.ready:
@@ -268,33 +473,46 @@ async def get_watch_stats(request: Request) -> dict[str, Any]:
     
     cache_dir = state.config.cache_root / "watch"
     
-    stats = {
-        "cache_dir": str(cache_dir),
-        "sources": {},
+    # Clear cache files for requested sources
+    source_files = {
+        "cisa": "cisa_kev.json",
+        "certfr": "certfr_alerte.xml",
+        "certfr-avis": "certfr_avis.xml",
+        "nvd": "nvd_recent.json",
+        "exploitdb": "exploitdb.xml",
+        "github": "github_advisories.json",
+        "packetstorm": "packetstorm.xml",
+        "threatpost": "threatpost.xml",
     }
     
-    # Check each cache file
-    cache_files = {
-        "cisa_kev": cache_dir / "cisa_kev.json",
-        "cert_fr": cache_dir / "certfr_alerte_rss.xml",
-    }
+    source_list = None
+    if sources:
+        source_list = [s.strip().lower() for s in sources.split(",")]
+    else:
+        source_list = list(source_files.keys())
     
-    for name, path in cache_files.items():
-        if path.exists():
-            stat = path.stat()
-            age_seconds = time.time() - stat.st_mtime
-            stats["sources"][name] = {
-                "cached": True,
-                "age_minutes": round(age_seconds / 60, 1),
-                "size_bytes": stat.st_size,
-                "stale": age_seconds > 1800  # > 30 min
-            }
-        else:
-            stats["sources"][name] = {
-                "cached": False,
-                "age_minutes": None,
-                "size_bytes": 0,
-                "stale": True
-            }
+    cleared = []
+    for source in source_list:
+        if source in source_files:
+            cache_file = cache_dir / source_files[source]
+            if cache_file.exists():
+                cache_file.unlink()
+                cleared.append(source)
     
-    return stats
+    # Re-fetch the feeds
+    from ...tools.webwatch import cyber_watch
+    try:
+        items = cyber_watch(cache_dir, sources=source_list, limit=50)
+        return {
+            "status": "refreshed",
+            "cleared_caches": cleared,
+            "new_item_count": len(items),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "status": "partial",
+            "cleared_caches": cleared,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }

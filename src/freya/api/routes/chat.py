@@ -5,6 +5,7 @@ Chat API Routes
 Endpoints for LLM chat interactions:
 - Single message generation
 - Streaming responses
+- Web search integration
 - Chat history management
 - Hat/persona selection
 """
@@ -43,6 +44,7 @@ class ChatRequest(BaseModel):
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=1, le=8192)
     stream: bool = Field(default=False, description="Enable streaming response")
+    web_search: bool = Field(default=False, description="Include web search results")
 
 
 class ChatResponse(BaseModel):
@@ -51,6 +53,7 @@ class ChatResponse(BaseModel):
     model: str
     duration_ms: int
     tokens_estimated: int | None = None
+    search_results: list[dict] | None = None
 
 
 class HatPreset(BaseModel):
@@ -58,6 +61,21 @@ class HatPreset(BaseModel):
     name: str
     description: str
     system_prompt: str
+
+
+class SearchRequest(BaseModel):
+    """Web search request."""
+    query: str = Field(..., description="Search query")
+    count: int = Field(default=5, ge=1, le=20)
+    provider: str = Field(default="duckduckgo", description="Search provider")
+
+
+class SearchResult(BaseModel):
+    """Search result."""
+    title: str
+    url: str
+    snippet: str
+    source: str
 
 
 # -----------------------------------------------------------------------------
@@ -117,6 +135,16 @@ DEFAULT_HATS: dict[str, dict[str, str]] = {
         "name": "Architect",
         "description": "Architecture logicielle, patterns, scalabilité",
         "system_prompt": "Tu es un architecte logiciel. Tu conseilles sur les patterns, la scalabilité, la maintenabilité et les choix technologiques."
+    },
+    "analyst": {
+        "name": "Business Analyst",
+        "description": "Analyse des besoins, user stories, spécifications",
+        "system_prompt": "Tu es un analyste métier expert. Tu aides à définir les besoins, rédiger les user stories, et clarifier les spécifications fonctionnelles."
+    },
+    "cyber": {
+        "name": "Cyber Analyst",
+        "description": "Veille cyber, CTI, analyse de menaces",
+        "system_prompt": "Tu es un analyste cyber threat intelligence. Tu surveilles les menaces, analyses les CVE, et fournis des recommandations de sécurité basées sur les dernières vulnérabilités connues."
     }
 }
 
@@ -142,7 +170,7 @@ async def generate_chat(request: Request, body: ChatRequest) -> ChatResponse:
     """
     Generate a chat response.
     
-    If stream=True, returns a streaming response instead.
+    If web_search=True, performs a search first and includes results in context.
     """
     state = request.app.state.freya
     
@@ -156,12 +184,32 @@ async def generate_chat(request: Request, body: ChatRequest) -> ChatResponse:
         if not models:
             raise HTTPException(status_code=503, detail="No models available")
         # Prefer certain models
-        for preferred in ["llama3.1:8b", "mistral:7b", "dolphin-llama3:8b"]:
+        for preferred in ["llama3.1:8b", "llama3.2:latest", "mistral:7b", "dolphin-llama3:8b", "qwen2.5:7b"]:
             if preferred in models:
                 model = preferred
                 break
         if not model:
             model = models[0]
+    
+    # Perform web search if requested
+    search_results = None
+    search_context = ""
+    if body.web_search:
+        from ...tools.websearch import WebSearch
+        try:
+            searcher = WebSearch(provider="duckduckgo")
+            results = searcher.search(body.message, count=5)
+            search_results = [
+                {"title": r.title, "url": r.url, "snippet": r.snippet, "source": r.source}
+                for r in results
+            ]
+            if results:
+                search_context = "\n\n### Résultats de recherche web:\n"
+                for r in results:
+                    search_context += f"- **{r.title}**: {r.snippet} ([source]({r.url}))\n"
+                search_context += "\nUtilise ces informations pour enrichir ta réponse.\n"
+        except Exception:
+            pass  # Continue without search results
     
     # Build system prompt
     system = body.system_prompt or DEFAULT_SYSTEM_PROMPT_FR
@@ -173,11 +221,16 @@ async def generate_chat(request: Request, body: ChatRequest) -> ChatResponse:
     today = dt.date.today().isoformat()
     system = f"{system}\n\nDate: {today}"
     
+    # Add search context to user message
+    user_message = body.message
+    if search_context:
+        user_message = f"{body.message}\n{search_context}"
+    
     # Generate response
     try:
         result = state.ollama.generate(
             model=model,
-            prompt=body.message,
+            prompt=user_message,
             system=system,
             options_extra={
                 "temperature": body.temperature,
@@ -193,31 +246,48 @@ async def generate_chat(request: Request, body: ChatRequest) -> ChatResponse:
             content=content,
             model=model,
             duration_ms=result.duration_ms,
-            tokens_estimated=len(content.split()) * 2  # Rough estimate
+            tokens_estimated=len(content.split()) * 2,  # Rough estimate
+            search_results=search_results
         )
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Generation failed: {e}")
 
 
-@router.post("/search")
-async def web_search(request: Request, query: str, limit: int = 5) -> list[dict[str, str]]:
+@router.post("/search", response_model=list[SearchResult])
+async def web_search(request: Request, body: SearchRequest) -> list[SearchResult]:
     """
-    Perform a web search (Wikipedia API).
+    Perform a web search.
+    
+    Providers:
+    - duckduckgo (default, free, unlimited)
+    - wikipedia (free, limited to Wikipedia)
+    - searxng (requires configured instance)
     """
     from ...tools.websearch import WebSearch
     
     try:
-        searcher = WebSearch(provider="wikipedia", brave_api_key="", user_agent="Freya/2.0")
-        results = searcher.search(query, count=limit)
+        searcher = WebSearch(provider=body.provider)
+        results = searcher.search(body.query, count=body.count)
         return [
-            {
-                "title": r.title,
-                "url": r.url,
-                "snippet": r.snippet,
-                "source": r.source
-            }
+            SearchResult(
+                title=r.title,
+                url=r.url,
+                snippet=r.snippet,
+                source=r.source
+            )
             for r in results
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {e}")
+
+
+@router.get("/search")
+async def web_search_get(
+    request: Request,
+    query: str,
+    count: int = 5,
+    provider: str = "duckduckgo"
+) -> list[SearchResult]:
+    """GET endpoint for web search (convenience)."""
+    return await web_search(request, SearchRequest(query=query, count=count, provider=provider))
