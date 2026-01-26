@@ -25,6 +25,8 @@ Freya est un orchestrateur multi-agent avancé aligné sur le workflow BMAD (Bus
 - **Gestion des modèles** : Téléchargement automatique, suivi et optimisation
 - **Sécurité renforcée** : Isolation des opérations dans des répertoires gérés
 
+<!-- TODO: Mettre à jour à chaque version majeure -->
+
 ## Architecture
 
 Freya suit une architecture modulaire organisée autour de composants spécialisés :
@@ -185,6 +187,8 @@ freya2/
 └─────────────────────────────────────┘
 ```
 
+<!-- TODO: Mettre à jour à chaque version majeure -->
+
 ## Démarrage rapide (Windows)
 
 ### 1) Installation (éditable)
@@ -202,6 +206,8 @@ Freya utilise un système de configuration flexible via des variables d'environn
 - `FREYA_LLAMACPP_EXE` : Chemin vers llama-server.exe
 - `FREYA_GGUF_DIR` : Répertoire pour les modèles GGUF
 - `FREYA_DISK_FREE_MIN_GB` : Espace disque minimum requis (40GB)
+
+<!-- TODO: Mettre à jour à chaque version majeure -->
 
 ## Commandes
 
@@ -232,6 +238,8 @@ L'interface TUI offre plusieurs onglets :
 
 Freya ne supprime jamais de fichiers en dehors de son répertoire `.freya`. Toutes les opérations sont isolées et les caches/logs sont automatiquement gérés.
 
+<!-- TODO: Mettre à jour à chaque version majeure -->
+
 ## Serveurs LLM supportés
 
 - Serveur par défaut : http://localhost:11434
@@ -247,6 +255,8 @@ Freya est développé en Python 3.11+ avec les dépendances suivantes :
 - rich : Interface console améliorée
 - textual : Framework TUI
 - psutil : Surveillance système
+
+<!-- TODO: Mettre à jour à chaque version majeure -->
 
 ## Version
 
@@ -289,6 +299,8 @@ Version actuelle : **1.1.6**
 - Ajout de suivi de progression pour les phases de benchmark et modèles
 - Correction de la gestion asynchrone dans le rechargement de l'arbre des artefacts TUI pour une meilleure stabilité
 
+<!-- TODO: Mettre à jour à chaque version majeure -->
+
 ## Commandes (CLI)
 
 ### Gestion des modèles
@@ -308,6 +320,8 @@ Version actuelle : **1.1.6**
 ### Automatisation de livraison
 
 - `freya autopilot --goal ... --name ... --output ...` — générer un projet + tests + ouvrir VS Code
+
+<!-- TODO: Mettre à jour à chaque version majeure -->
 
 ## Architecture (haut niveau)
 
@@ -337,15 +351,21 @@ Orchestrator / Autopilot
    +--> Artefacts + Logs (JSONL) + État (reprendre)
 ```
 
+<!-- TODO: Mettre à jour à chaque version majeure -->
+
 ## Sécurité
 
 - **Local-first** : exécution locale, modèles locaux.
 - **Traçabilité** : logs d'événements (JSONL) pour diagnostic/replay.
 - **Recommandation forte** : ne jamais coller de tokens/clés en texte clair dans l'UI, les prompts ou les logs.
 
+<!-- TODO: Mettre à jour à chaque version majeure -->
+
 ## Polices & icônes (recommandées)
 
 Pour un rendu propre (icônes terminal), utilisez une Nerd Font dans Windows Terminal (ex: CaskaydiaCove Nerd Font) puis configurez le profil.
+
+<!-- TODO: Mettre à jour à chaque version majeure -->
 
 ## Statut & roadmap
 
@@ -362,6 +382,8 @@ Pour un rendu propre (icônes terminal), utilisez une Nerd Font dans Windows Ter
 - Chat Bench dédié / Résumé / Recherche web
 - Paramètres remplis et éditables (prompts/préréglages/chapeaux)
 - Cyber Watch (watch) via sources publiques (API/RSS), formaté FR
+
+<!-- TODO: Mettre à jour à chaque version majeure -->
 
 ## Références / Sources
 

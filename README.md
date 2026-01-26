@@ -25,6 +25,8 @@ Freya is an advanced multi-agent orchestrator aligned with the BMAD workflow (Bu
 - **Model Management** : Automatic downloading, tracking and optimization
 - **Enhanced Security** : Operations isolation in managed directories
 
+<!-- TODO: Update with each major release -->
+
 ## Architecture
 
 Freya follows a modular architecture organized around specialized components:
@@ -185,6 +187,8 @@ freya2/
 └─────────────────────────────────────┘
 ```
 
+<!-- TODO: Update with each major release -->
+
 ## Quickstart (Windows)
 
 ### 1) Install (editable)
@@ -202,6 +206,8 @@ Freya uses a flexible configuration system via environment variables :
 - `FREYA_LLAMACPP_EXE` : Path to llama-server.exe
 - `FREYA_GGUF_DIR` : Directory for GGUF models
 - `FREYA_DISK_FREE_MIN_GB` : Minimum required disk space (40GB)
+
+<!-- TODO: Update with each major release -->
 
 ## Commands
 
@@ -232,6 +238,8 @@ The TUI interface offers several tabs :
 
 Freya never deletes files outside its `.freya` directory. All operations are isolated and caches/logs are automatically managed.
 
+<!-- TODO: Update with each major release -->
+
 ## Supported LLM Servers
 
 - Default server : http://localhost:11434
@@ -247,6 +255,8 @@ Freya is developed in Python 3.11+ with the following dependencies :
 - rich : Enhanced console interface
 - textual : TUI framework
 - psutil : System monitoring
+
+<!-- TODO: Update with each major release -->
 
 ## Version
 
@@ -289,6 +299,8 @@ Current version: **1.1.6**
 - Added progress tracking for benchmark phases and models
 - Fixed async handling in TUI artifacts tree reload for improved stability
 
+<!-- TODO: Update with each major release -->
+
 ## Commands (CLI)
 
 ### Model management
@@ -308,6 +320,8 @@ Current version: **1.1.6**
 ### Delivery automation
 
 - `freya autopilot --goal ... --name ... --output ...` — generate a project + tests + open VS Code
+
+<!-- TODO: Update with each major release -->
 
 ## Architecture (high-level)
 
@@ -337,15 +351,21 @@ Orchestrator / Autopilot
    +--> Artifacts + Logs (JSONL) + State (resume)
 ```
 
+<!-- TODO: Update with each major release -->
+
 ## Security
 
 - **Local-first** : local execution, local models.
 - **Traceability** : event logs (JSONL) for diagnosis/replay.
 - **Strong recommendation** : never paste tokens/keys in plain text in the UI, prompts or logs.
 
+<!-- TODO: Update with each major release -->
+
 ## Fonts & icons (recommended)
 
 For clean rendering (terminal icons), use a Nerd Font in Windows Terminal (ex: CaskaydiaCove Nerd Font) then configure the profile.
+
+<!-- TODO: Update with each major release -->
 
 ## Status & roadmap
 
@@ -362,6 +382,8 @@ For clean rendering (terminal icons), use a Nerd Font in Windows Terminal (ex: C
 - Dedicated Bench Chat / Summary / Web-research
 - Filled and editable Settings (prompts/presets/hats)
 - Cyber Watch (watch) via public sources (API/RSS), formatted FR
+
+<!-- TODO: Update with each major release -->
 
 ## References / Sources
 
