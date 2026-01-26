@@ -136,6 +136,10 @@ export function BenchPage() {
   const [continuousPhase, setContinuousPhase] = useState<BenchProgram | 'fine-tuning' | null>(null)
   const [autoAdvance, setAutoAdvance] = useState(true)
   
+  // Time estimation state
+  const [phaseStartTime, setPhaseStartTime] = useState<Date | null>(null)
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string | null>(null)
+  
   // Manual model selection
   const [modelOverrides, setModelOverrides] = useState<ModelOverride[]>([])
   const [editingRole, setEditingRole] = useState<string | null>(null)
@@ -184,12 +188,40 @@ export function BenchPage() {
         progress_percent: status.progress_percent,
       } : null)
       
-      // Handle continuous mode progression
-      if (continuousMode && !status.running && continuousPhase) {
+      // Track phase start time for estimation
+      if (status.running && !phaseStartTime) {
+        setPhaseStartTime(new Date())
+      }
+      
+      // Calculate time estimation
+      if (status.running && phaseStartTime && status.progress_percent > 0) {
+        const elapsed = (new Date().getTime() - phaseStartTime.getTime()) / 1000
+        const estimatedTotal = elapsed / (status.progress_percent / 100)
+        const remaining = estimatedTotal - elapsed
+        
+        if (remaining > 0) {
+          const mins = Math.floor(remaining / 60)
+          const secs = Math.floor(remaining % 60)
+          setEstimatedTimeRemaining(`~${mins}m ${secs}s remaining`)
+        } else {
+          setEstimatedTimeRemaining('Completing...')
+        }
+      }
+      
+      // Handle continuous mode progression - trigger when bench completes
+      if (continuousMode && !status.running && continuousPhase && autoAdvance) {
+        // Reset time tracking for next phase
+        setPhaseStartTime(null)
+        setEstimatedTimeRemaining(null)
         handleContinuousProgression()
       }
+      
+      // Reset time tracking when stopped
+      if (!status.running) {
+        setPhaseStartTime(null)
+      }
     }
-  }, [status, setBenchProgress, continuousMode, continuousPhase])
+  }, [status, setBenchProgress, continuousMode, continuousPhase, autoAdvance, phaseStartTime])
 
   // Start benchmark mutation
   const startMutation = useMutation({
@@ -222,32 +254,48 @@ export function BenchPage() {
 
   // Handle continuous mode progression
   const handleContinuousProgression = () => {
-    if (!autoAdvance) return
+    if (!autoAdvance) {
+      console.log('[Bench] Auto-advance disabled, stopping progression')
+      return
+    }
     
     const currentOrder = PROGRAMS.find(p => p.id === continuousPhase)?.order ?? 0
     const nextProgram = PROGRAMS.find(p => p.order === currentOrder + 1)
     
+    console.log(`[Bench] Continuous progression: current=${continuousPhase}, order=${currentOrder}, next=${nextProgram?.id || 'none'}`)
+    
     if (nextProgram) {
+      console.log(`[Bench] Advancing to ${nextProgram.id} in 3 seconds...`)
       setContinuousPhase(nextProgram.id)
+      setSelectedProgram(nextProgram.id)
+      // Delay to allow UI update and prevent race conditions
       setTimeout(() => {
+        console.log(`[Bench] Starting ${nextProgram.id}`)
         startMutation.mutate(nextProgram.id)
-      }, 2000)
+        setPhaseStartTime(new Date())
+      }, 3000)
     } else if (continuousPhase === 'bench-advanced') {
-      // Switch to fine-tuning mode
+      // All benchmark phases complete, switch to fine-tuning mode
+      console.log('[Bench] All benchmark phases complete, entering fine-tuning')
       setContinuousPhase('fine-tuning')
-      // Fine-tuning would be handled separately
+      // TODO: Implement fine-tuning auto-trigger
     } else {
-      // All phases complete
+      // All phases including fine-tuning complete
+      console.log('[Bench] Continuous benchmark fully complete')
       setContinuousMode(false)
       setContinuousPhase(null)
+      setEstimatedTimeRemaining(null)
     }
   }
 
   // Start continuous benchmark
   const startContinuousBenchmark = () => {
+    console.log('[Bench] Starting continuous benchmark from bench-fast')
     setContinuousMode(true)
     setContinuousPhase('bench-fast')
     setSelectedProgram('bench-fast')
+    setPhaseStartTime(new Date())
+    setEstimatedTimeRemaining(null)
     startMutation.mutate('bench-fast')
   }
 
@@ -556,6 +604,11 @@ export function BenchPage() {
                   <p className="text-sm text-freya-text-muted">
                     Model {status.model_index}/{status.total_models}
                   </p>
+                  {estimatedTimeRemaining && (
+                    <p className="text-xs text-freya-accent-cyan mt-1">
+                      {estimatedTimeRemaining}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -611,7 +664,7 @@ export function BenchPage() {
               </div>
 
               {/* Current Status */}
-              <div className="grid grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-5 gap-4 text-sm">
                 <div className="bg-freya-bg-primary rounded-lg p-3">
                   <div className="text-freya-text-muted mb-1">Role</div>
                   <div className="font-medium text-freya-text-primary capitalize">{status.role}</div>
@@ -631,6 +684,12 @@ export function BenchPage() {
                 <div className="bg-freya-bg-primary rounded-lg p-3">
                   <div className="text-freya-text-muted mb-1">Program</div>
                   <div className="font-medium text-freya-text-primary">{status.program}</div>
+                </div>
+                <div className="bg-freya-bg-primary rounded-lg p-3">
+                  <div className="text-freya-text-muted mb-1">ETA</div>
+                  <div className="font-medium text-freya-accent-cyan">
+                    {estimatedTimeRemaining || 'Calculating...'}
+                  </div>
                 </div>
               </div>
             </div>

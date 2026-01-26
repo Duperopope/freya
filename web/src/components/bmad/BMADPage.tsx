@@ -348,6 +348,14 @@ Répondez à ces questions ou posez-moi les vôtres !`,
     
     setChatMessages([welcomeMessage])
     setMode('brainstorm')
+    setBrainstormComplete(false)
+  }
+  
+  // Quick launch without brainstorming
+  const quickLaunch = () => {
+    if (!goal.trim()) return
+    setBrainstormComplete(true)
+    startMutation.mutate()
   }
 
   // Skip brainstorming
@@ -411,7 +419,7 @@ Répondez à ces questions ou posez-moi les vôtres !`,
                 onChange={(e) => setGoal(e.target.value)}
                 placeholder="Describe your project goal... (e.g., 'Build a task management API with user authentication')"
                 className="input pl-11 pr-4"
-                disabled={isRunning || mode === 'brainstorm'}
+                disabled={isRunning}
               />
             </div>
           </div>
@@ -424,7 +432,7 @@ Répondez à ces questions ou posez-moi les vôtres !`,
               onChange={(e) => setProjectName(e.target.value)}
               placeholder="Project name"
               className="input"
-              disabled={isRunning || mode === 'brainstorm'}
+              disabled={isRunning}
             />
           </div>
 
@@ -514,9 +522,12 @@ Répondez à ces questions ou posez-moi les vôtres !`,
 
       {/* Main Content */}
       <div className="flex-1 overflow-hidden flex">
-        {/* Brainstorm Chat (when in brainstorm mode) */}
-        {mode === 'brainstorm' && (
-          <div className="w-96 border-r border-freya-border flex flex-col bg-freya-bg-secondary">
+        {/* Brainstorm Chat - Always visible, expandable */}
+        {(mode === 'brainstorm' || chatMessages.length > 0) && (
+          <div className={clsx(
+            'border-r border-freya-border flex flex-col bg-freya-bg-secondary transition-all',
+            mode === 'brainstorm' ? 'w-96' : 'w-80'
+          )}>
             <div className="p-4 border-b border-freya-border">
               <h3 className="font-semibold text-freya-text-primary flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-freya-accent-blue" />
@@ -589,16 +600,24 @@ Répondez à ces questions ou posez-moi les vôtres !`,
                   onKeyDown={(e) => e.key === 'Enter' && sendBrainstormMessage()}
                   placeholder="Type your response..."
                   className="input flex-1"
-                  disabled={isBrainstorming}
+                  disabled={isBrainstorming || isRunning}
                 />
                 <button
                   onClick={sendBrainstormMessage}
-                  disabled={!chatInput.trim() || isBrainstorming}
+                  disabled={!chatInput.trim() || isBrainstorming || isRunning}
                   className="btn-primary p-2"
                 >
                   <Send className="w-5 h-5" />
                 </button>
               </div>
+              {mode !== 'brainstorm' && chatMessages.length > 0 && (
+                <button
+                  onClick={() => setMode('brainstorm')}
+                  className="mt-2 text-xs text-freya-accent-blue hover:underline"
+                >
+                  Continue brainstorming
+                </button>
+              )}
             </div>
           </div>
         )}
