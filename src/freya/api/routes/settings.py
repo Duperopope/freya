@@ -288,9 +288,159 @@ async def get_env_vars() -> dict[str, str | None]:
 async def get_version() -> dict[str, str]:
     """Get Freya version information."""
     return {
-        "version": "2.0.0",
-        "api_version": "2.0",
+        "version": "2.1.0",
+        "api_version": "2.1",
         "python_version": f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}",
+    }
+
+
+# -----------------------------------------------------------------------------
+# Hybrid Routing Endpoints (v2.1)
+# -----------------------------------------------------------------------------
+@router.get("/hybrid-routing")
+async def get_hybrid_routing_config(request: Request) -> dict[str, Any]:
+    """Get hybrid routing configuration."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.config:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    cfg = state.config.hybrid_routing
+    return {
+        "enabled": cfg.enabled,
+        "percent_threshold": cfg.percent_threshold,
+        "local_min_score": cfg.local_min_score,
+        "fallback_chain": cfg.fallback_chain,
+        "health_timeout_sec": cfg.health_timeout_sec,
+        "health_check_interval_min": cfg.health_check_interval_min,
+        "max_retries": cfg.max_retries,
+        "quota_cache_sec": cfg.quota_cache_sec,
+    }
+
+
+@router.get("/providers")
+async def get_providers(request: Request) -> dict[str, Any]:
+    """Get remote provider configurations."""
+    from ...config import PROVIDERS
+    
+    state = request.app.state.freya
+    
+    if not state.ready:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    # Return providers with API keys redacted
+    providers = {}
+    for pid, cfg in PROVIDERS.items():
+        providers[pid] = {
+            "name": cfg["name"],
+            "base_url": cfg["base_url"],
+            "enabled": cfg["enabled"],
+            "priority": cfg["priority"],
+            "models": cfg["models"],
+            "rate_limits": cfg.get("rate_limits", {}),
+            "free_tier": cfg.get("free_tier", {}),
+            "has_api_key": bool(os.environ.get(cfg["api_key_env"], "")),
+        }
+    
+    return providers
+
+
+@router.get("/provider-health")
+async def get_provider_health(request: Request) -> dict[str, Any]:
+    """Get health status of all providers."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.orchestrator:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    return state.orchestrator.get_provider_health()
+
+
+@router.get("/local-runtimes")
+async def get_local_runtimes(request: Request) -> dict[str, Any]:
+    """Get status of local LLM runtimes."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.orchestrator:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    if not state.orchestrator.runtime_detector:
+        return {"error": "Runtime detection not available"}
+    
+    return state.orchestrator.runtime_detector.get_runtime_status()
+
+
+@router.post("/local-runtimes/detect")
+async def detect_local_runtimes(request: Request) -> dict[str, Any]:
+    """Trigger detection of local LLM runtimes."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.orchestrator:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    if not state.orchestrator.runtime_detector:
+        return {"error": "Runtime detection not available"}
+    
+    state.orchestrator.runtime_detector.detect_all_runtimes()
+    return state.orchestrator.runtime_detector.get_runtime_status()
+
+
+@router.get("/usage-stats")
+async def get_usage_stats(request: Request) -> dict[str, Any]:
+    """Get usage statistics for hybrid routing."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.orchestrator:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    return state.orchestrator.get_usage_stats()
+
+
+class PredictConsumptionRequest(BaseModel):
+    """Request for consumption prediction."""
+    role: str = Field(..., description="BMAD role (analyst, pm, architect, etc.)")
+    prompt_tokens: int = Field(default=500, description="Estimated input tokens")
+    provider: str = Field(default="local", description="Target provider")
+
+
+@router.post("/predict-consumption")
+async def predict_consumption(request: Request, body: PredictConsumptionRequest) -> dict[str, Any]:
+    """Predict token consumption and cost for a task."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.orchestrator:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    return state.orchestrator.predict_consumption(
+        role=body.role,
+        prompt_tokens=body.prompt_tokens,
+        provider=body.provider,
+    )
+
+
+class UpdateProviderKeyRequest(BaseModel):
+    """Request to update a provider API key."""
+    provider: str = Field(..., description="Provider ID (hf, together, groq)")
+    api_key: str = Field(..., description="API key")
+
+
+@router.post("/provider-key")
+async def update_provider_key(request: Request, body: UpdateProviderKeyRequest) -> dict[str, Any]:
+    """Update a provider API key (stored in environment)."""
+    from ...config import PROVIDERS
+    
+    if body.provider not in PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"Unknown provider: {body.provider}")
+    
+    env_var = PROVIDERS[body.provider]["api_key_env"]
+    
+    # Set environment variable for current session
+    os.environ[env_var] = body.api_key
+    
+    return {
+        "success": True,
+        "provider": body.provider,
+        "message": f"API key set for {PROVIDERS[body.provider]['name']}. Note: This only persists for the current session.",
     }
 
 

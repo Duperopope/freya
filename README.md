@@ -669,6 +669,11 @@ pytest tests/
 ### v2.1.0 (2026-01-26)
 
 #### New Features
+- **Hybrid Routing** : Intelligent local/remote LLM routing with multi-provider support
+- **Multi-Provider Support** : HuggingFace, Together AI, Groq integration with fallback chain
+- **Local Runtime Detection** : Auto-detect Ollama, LM Studio, KoboldCpp, oobabooga
+- **Consumption Prediction** : ML-based token and cost estimation
+- **Health Monitoring** : Real-time provider health tracking with automatic failover
 - **Free Web Search** : DuckDuckGo and SearXNG integration (no API key required)
 - **Enhanced Cyber Watch** : 8+ security sources (NVD, Exploit-DB, GitHub Security, PacketStorm)
 - **Repository Integration** : GitHub/GitLab API configuration for BMAD repo access
@@ -676,6 +681,39 @@ pytest tests/
 - **Editable Paths** : Full path configuration in Settings
 - **Auto-refresh Toggle** : Visible timestamps and configurable refresh for Watch
 - **JSON Export** : Export filtered vulnerabilities as JSON
+
+#### Hybrid Routing Architecture
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     HYBRID ROUTING v2.1                              │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │                      ROUTING DECISION                          │  │
+│  │                                                                 │  │
+│  │  1. Check local availability (Ollama/Llama.cpp)               │  │
+│  │  2. If local_score >= MIN_THRESHOLD → Use local               │  │
+│  │  3. Else evaluate remote providers:                            │  │
+│  │     - Check health status                                      │  │
+│  │     - Check quota availability                                 │  │
+│  │     - Compare scores: remote > local * PERCENT_THRESHOLD?      │  │
+│  │  4. Fallback chain: Groq → HF → Together → Local              │  │
+│  │                                                                 │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                      │
+│  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐       │
+│  │   LOCAL        │  │   REMOTE       │  │   FALLBACK     │       │
+│  │                │  │                │  │                │       │
+│  │  • Ollama      │  │  • Groq (1)    │  │  Automatic     │       │
+│  │  • LM Studio   │  │  • HF (2)      │  │  failover      │       │
+│  │  • KoboldCpp   │  │  • Together(3) │  │  with health   │       │
+│  │  • oobabooga   │  │                │  │  monitoring    │       │
+│  │  • llama.cpp   │  │  Priority →    │  │                │       │
+│  │                │  │                │  │                │       │
+│  └────────────────┘  └────────────────┘  └────────────────┘       │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 #### Improvements
 - **Settings Overhaul** : Complete redesign with 6 tabs (Paths, Ollama, Routing, APIs, Appearance, About)
@@ -706,6 +744,169 @@ pytest tests/
 - Architecture diagrams
 - TUI improvements
 - Better routing and autopilot
+
+---
+
+## Hybrid Routing Configuration
+
+### Environment Variables
+
+```bash
+# Enable/disable hybrid routing
+FREYA_HYBRID_ENABLED=true
+
+# Remote must be X% better to switch (default: 1.20 = 20% better)
+FREYA_HYBRID_THRESHOLD=1.20
+
+# Minimum local score to skip remote validation (default: 70)
+FREYA_HYBRID_LOCAL_MIN=70
+
+# Fallback chain (comma-separated)
+FREYA_HYBRID_FALLBACK=groq,hf,together,local
+
+# Health check timeout (seconds)
+FREYA_HEALTH_TIMEOUT=5
+
+# API Keys (required for remote providers)
+HF_API_KEY=your_huggingface_token
+TOGETHER_API_KEY=your_together_api_key
+GROQ_API_KEY=your_groq_api_key
+```
+
+### Provider Free Tiers (January 2026)
+
+| Provider | Free Tier | Rate Limits | Notes |
+|----------|-----------|-------------|-------|
+| **Groq** | Free forever | 30 RPM, 14.4K RPD | No credit card required |
+| **HuggingFace** | $0.10/month | 60 RPM | PRO users: $2/month |
+| **Together AI** | $25 signup | 600 RPM, 180K TPM | Requires $5 minimum |
+
+### Supported Local Runtimes
+
+| Runtime | Default Port | Detection |
+|---------|--------------|-----------|
+| Ollama | 11434 | `/api/tags` |
+| LM Studio | 1234 | `/v1/models` |
+| KoboldCpp | 5001 | `/api/v1/model` |
+| oobabooga | 5000 | `/v1/models` |
+| llama.cpp | 8080 | `/health` |
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### 1. Ollama Connection Failed
+
+**Symptoms**: "Cannot connect to Ollama" error, health check failing
+
+**Solutions**:
+```bash
+# Check if Ollama is running
+curl http://localhost:11434/api/tags
+
+# Start Ollama if not running
+ollama serve
+
+# On Windows, check if Ollama service is running
+Get-Service -Name "Ollama"
+```
+
+#### 2. No Models Available
+
+**Symptoms**: Empty model list, benchmarks fail
+
+**Solutions**:
+```bash
+# Pull a model
+ollama pull llama3.1:8b
+ollama pull qwen2.5:7b
+
+# List available models
+ollama list
+```
+
+#### 3. Remote Provider Auth Failed
+
+**Symptoms**: 401/403 errors when using remote providers
+
+**Solutions**:
+```bash
+# Set API keys in environment
+export GROQ_API_KEY=your_key
+export HF_API_KEY=your_key
+export TOGETHER_API_KEY=your_key
+
+# Or set in PowerShell (Windows)
+$env:GROQ_API_KEY="your_key"
+```
+
+#### 4. High Memory Usage
+
+**Symptoms**: System slowdown during benchmarks, OOM errors
+
+**Solutions**:
+```bash
+# Limit concurrent models (edit config)
+FREYA_BENCH_MAX_MODELS=6
+
+# Use smaller models for benchmarking
+# Edit routing.json to prefer smaller variants
+```
+
+#### 5. BMAD Pipeline Stuck
+
+**Symptoms**: Pipeline hangs on an agent
+
+**Solutions**:
+1. Check the logs: `freya serve --debug`
+2. Use the Stop button in BMAD Studio
+3. Verify Ollama is responding: `curl http://localhost:11434/api/generate -d '{"model":"llama3.1:8b","prompt":"test"}'`
+
+#### 6. Frontend Build Errors
+
+**Symptoms**: TypeScript errors, build failures
+
+**Solutions**:
+```bash
+cd web
+rm -rf node_modules package-lock.json
+npm install
+npm run build
+```
+
+#### 7. WebSocket Disconnection
+
+**Symptoms**: Real-time updates stop, "Disconnected" status
+
+**Solutions**:
+1. Refresh the page
+2. Check if backend is still running
+3. Check for CORS issues in browser console
+
+### Logs Location
+
+| Platform | Log Path |
+|----------|----------|
+| Windows | `%USERPROFILE%\.freya\logs\` |
+| Linux/macOS | `~/.freya/logs/` |
+
+### Debug Mode
+
+```bash
+# Run with full debug output
+freya serve --debug
+
+# Check API health
+curl http://localhost:8765/api/health
+```
+
+### Getting Help
+
+1. Check the [GitHub Issues](https://github.com/Duperopope/Freya/issues)
+2. Enable debug logging and share relevant logs
+3. Include system info: OS, Python version, Node version
 
 ---
 

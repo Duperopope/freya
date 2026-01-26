@@ -5,13 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "freya"
 version = "2.1.0"
-description = "Freya - BMAD-aligned multi-agent orchestrator for local LLMs via Ollama and Modern Web UI"
+description = "Freya - BMAD-aligned multi-agent orchestrator for local LLMs via Ollama with Hybrid Routing and Modern Web UI"
 requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2.7.0",
   "requests>=2.32.0",
   "rich>=13.7.0",
   "psutil>=6.0.0",
+  "numpy>=1.26.0",
   # Web API dependencies
   "fastapi>=0.109.0",
   "uvicorn[standard]>=0.27.0",
@@ -21,12 +22,20 @@ dependencies = [
 [project.optional-dependencies]
 # Legacy TUI support (optional)
 tui = ["textual>=0.47.0"]
+# Machine Learning for consumption prediction
+ml = ["scikit-learn>=1.4.0"]
+# Full hybrid routing support
+hybrid = [
+  "scikit-learn>=1.4.0",
+  "keyring>=25.0.0",  # Secure API key storage
+]
 # Development dependencies
 dev = [
   "pytest>=8.0.0",
   "httpx>=0.26.0",
   "pytest-asyncio>=0.23.0",
   "ruff>=0.2.0",
+  "scikit-learn>=1.4.0",
 ]
 
 [project.scripts]
