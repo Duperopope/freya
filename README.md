@@ -86,6 +86,8 @@ freya2/
 - **TUI** : Modern user interface with Textual
 - **CLI** : Command line interface for automation and scripting
 
+<!-- TODO: Update architecture diagrams and descriptions with each major release -->
+
 ### Logical Architecture
 
 #### Overview of interactions
@@ -133,7 +135,7 @@ freya2/
                     ▼         ▼         ▼
           ┌─────────────────┐ ┌───────┐ ┌───────┐
           │     Tools       │ │Web-   │ │ IDE   │
-          │    (Shell)      │ │Watch  │ │Ctrl   │
+          │ (Shell/Web/...) │ │Watch  │ │Ctrl   │
           └─────────────────┘ └───────┘ └───────┘
 
                     ┌─────────────────┐
