@@ -1,0 +1,407 @@
+/**
+ * Freya API Client
+ * 
+ * Type-safe API calls to the Freya backend.
+ */
+
+const API_BASE = '/api'
+
+interface ApiError {
+  error: string
+  type?: string
+}
+
+async function handleResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const error: ApiError = await response.json().catch(() => ({
+      error: `HTTP ${response.status}: ${response.statusText}`
+    }))
+    throw new Error(error.error || 'API request failed')
+  }
+  return response.json()
+}
+
+// -----------------------------------------------------------------------------
+// Health & System
+// -----------------------------------------------------------------------------
+export interface HealthResponse {
+  status: string
+  ready: boolean
+  ollama: {
+    connected: boolean
+    models_count: number
+    base_url: string | null
+  }
+  config: {
+    managed_root: string | null
+    output_root: string | null
+  }
+}
+
+export interface SystemInfo {
+  cpu_percent: number
+  ram_percent: number
+  disk_free_gb: number
+  disk_total_gb: number
+}
+
+export async function getHealth(): Promise<HealthResponse> {
+  const res = await fetch(`${API_BASE}/health`)
+  return handleResponse(res)
+}
+
+export async function getSystemInfo(): Promise<SystemInfo> {
+  const res = await fetch(`${API_BASE}/system`)
+  return handleResponse(res)
+}
+
+// -----------------------------------------------------------------------------
+// Chat
+// -----------------------------------------------------------------------------
+export interface ChatRequest {
+  message: string
+  model?: string
+  system_prompt?: string
+  hat?: string
+  temperature?: number
+  max_tokens?: number
+}
+
+export interface ChatResponse {
+  content: string
+  model: string
+  duration_ms: number
+  tokens_estimated?: number
+}
+
+export interface HatPreset {
+  name: string
+  description: string
+  system_prompt: string
+}
+
+export interface SearchResult {
+  title: string
+  url: string
+  snippet: string
+  source: string
+}
+
+export async function generateChat(request: ChatRequest): Promise<ChatResponse> {
+  const res = await fetch(`${API_BASE}/chat/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  return handleResponse(res)
+}
+
+export async function getHats(): Promise<HatPreset[]> {
+  const res = await fetch(`${API_BASE}/chat/hats`)
+  return handleResponse(res)
+}
+
+export async function webSearch(query: string, limit = 5): Promise<SearchResult[]> {
+  const res = await fetch(`${API_BASE}/chat/search?query=${encodeURIComponent(query)}&limit=${limit}`, {
+    method: 'POST',
+  })
+  return handleResponse(res)
+}
+
+// -----------------------------------------------------------------------------
+// Bench
+// -----------------------------------------------------------------------------
+export interface BenchStatus {
+  running: boolean
+  program: string
+  phase: string
+  role: string
+  model: string
+  model_index: number
+  total_models: number
+  step_index: number
+  total_steps: number
+  last_event: string
+  progress_percent: number
+}
+
+export interface BenchResult {
+  role: string
+  phase: string
+  model: string
+  score: number
+  latency_ms: number
+  status: string
+}
+
+export interface BillboardEntry {
+  role: string
+  model: string
+  score: number
+  latency_ms: number
+  options: Record<string, unknown>
+}
+
+export async function getBenchStatus(): Promise<BenchStatus> {
+  const res = await fetch(`${API_BASE}/bench/status`)
+  return handleResponse(res)
+}
+
+export async function startBench(program: string, resume = true): Promise<{ started: boolean }> {
+  const res = await fetch(`${API_BASE}/bench/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ program, resume }),
+  })
+  return handleResponse(res)
+}
+
+export async function stopBench(): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE}/bench/stop`, { method: 'POST' })
+  return handleResponse(res)
+}
+
+export async function getBillboard(): Promise<BillboardEntry[]> {
+  const res = await fetch(`${API_BASE}/bench/billboard`)
+  return handleResponse(res)
+}
+
+export async function getBenchHistory(program = 'bench-fast', limit = 100): Promise<BenchResult[]> {
+  const res = await fetch(`${API_BASE}/bench/history?program=${program}&limit=${limit}`)
+  return handleResponse(res)
+}
+
+export async function applyRouting(): Promise<{ success: boolean }> {
+  const res = await fetch(`${API_BASE}/bench/apply-routing`, { method: 'POST' })
+  return handleResponse(res)
+}
+
+// -----------------------------------------------------------------------------
+// Models
+// -----------------------------------------------------------------------------
+export interface ModelInfo {
+  name: string
+  size_bytes?: number
+  size_gb?: number
+  modified_at?: string
+  is_freya_pulled: boolean
+}
+
+export interface RoutingConfig {
+  role: string
+  model: string
+  options: Record<string, unknown>
+}
+
+export async function getModels(): Promise<ModelInfo[]> {
+  const res = await fetch(`${API_BASE}/models/`)
+  return handleResponse(res)
+}
+
+export async function pullModel(model: string): Promise<{ started: boolean }> {
+  const res = await fetch(`${API_BASE}/models/pull`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  })
+  return handleResponse(res)
+}
+
+export async function getRouting(): Promise<RoutingConfig[]> {
+  const res = await fetch(`${API_BASE}/models/routing`)
+  return handleResponse(res)
+}
+
+export async function setRouting(configs: RoutingConfig[]): Promise<{ saved: boolean }> {
+  const res = await fetch(`${API_BASE}/models/routing`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(configs),
+  })
+  return handleResponse(res)
+}
+
+// -----------------------------------------------------------------------------
+// BMAD
+// -----------------------------------------------------------------------------
+export interface BMADStatus {
+  running: boolean
+  current_agent: string | null
+  agents_completed: string[]
+  artifacts_generated: string[]
+  error: string | null
+}
+
+export interface ArtifactInfo {
+  name: string
+  path: string
+  size_bytes: number
+  modified_at: string
+}
+
+export async function getBMADStatus(): Promise<BMADStatus> {
+  const res = await fetch(`${API_BASE}/bmad/status`)
+  return handleResponse(res)
+}
+
+export async function runBMAD(goal: string, projectName = 'FreyaProject'): Promise<{ started: boolean }> {
+  const res = await fetch(`${API_BASE}/bmad/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ goal, project_name: projectName }),
+  })
+  return handleResponse(res)
+}
+
+export async function getArtifacts(project?: string): Promise<ArtifactInfo[]> {
+  const url = project 
+    ? `${API_BASE}/bmad/artifacts?project=${encodeURIComponent(project)}`
+    : `${API_BASE}/bmad/artifacts`
+  const res = await fetch(url)
+  return handleResponse(res)
+}
+
+export async function getArtifact(path: string): Promise<{ name: string; path: string; content: string }> {
+  const res = await fetch(`${API_BASE}/bmad/artifact?path=${encodeURIComponent(path)}`)
+  return handleResponse(res)
+}
+
+// -----------------------------------------------------------------------------
+// Files
+// -----------------------------------------------------------------------------
+export interface FileEntry {
+  name: string
+  path: string
+  is_dir: boolean
+  size_bytes?: number
+  modified_at?: string
+  mime_type?: string
+}
+
+export interface DirectoryListing {
+  path: string
+  parent: string | null
+  entries: FileEntry[]
+}
+
+export interface FileContent {
+  path: string
+  name: string
+  content: string
+  size_bytes: number
+  mime_type?: string
+}
+
+export async function browseDirectory(path = ''): Promise<DirectoryListing> {
+  const res = await fetch(`${API_BASE}/files/browse?path=${encodeURIComponent(path)}`)
+  return handleResponse(res)
+}
+
+export async function readFile(path: string): Promise<FileContent> {
+  const res = await fetch(`${API_BASE}/files/read?path=${encodeURIComponent(path)}`)
+  return handleResponse(res)
+}
+
+export async function writeFile(path: string, content: string): Promise<{ success: boolean }> {
+  const res = await fetch(`${API_BASE}/files/write`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, content }),
+  })
+  return handleResponse(res)
+}
+
+export async function getFileTree(maxDepth = 3): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/files/tree?max_depth=${maxDepth}`)
+  return handleResponse(res)
+}
+
+// -----------------------------------------------------------------------------
+// Watch
+// -----------------------------------------------------------------------------
+export interface WatchItem {
+  source: string
+  title: string
+  url: string
+  published: string
+  cve?: string
+  severity?: string
+}
+
+export interface CVEInfo {
+  cve_id: string
+  description: string
+  severity?: string
+  cvss_score?: number
+  references: string[]
+  affected_products: string[]
+}
+
+export async function getWatchFeed(limit = 25): Promise<WatchItem[]> {
+  const res = await fetch(`${API_BASE}/watch/?limit=${limit}`)
+  return handleResponse(res)
+}
+
+export async function getCISAKEV(limit = 50): Promise<{ items: WatchItem[] }> {
+  const res = await fetch(`${API_BASE}/watch/cisa-kev?limit=${limit}`)
+  return handleResponse(res)
+}
+
+export async function getCERTFR(limit = 30): Promise<{ items: WatchItem[] }> {
+  const res = await fetch(`${API_BASE}/watch/cert-fr?limit=${limit}`)
+  return handleResponse(res)
+}
+
+export async function lookupCVE(cveId: string): Promise<CVEInfo> {
+  const res = await fetch(`${API_BASE}/watch/cve/${encodeURIComponent(cveId)}`)
+  return handleResponse(res)
+}
+
+// -----------------------------------------------------------------------------
+// Settings
+// -----------------------------------------------------------------------------
+export interface PathsConfig {
+  managed_root: string
+  cache_root: string
+  artifacts_root: string
+  output_root: string
+  prompts_root: string
+  workspace_root: string
+  routing_path: string
+}
+
+export interface PromptInfo {
+  name: string
+  path: string
+  size_bytes: number
+  preview?: string
+}
+
+export async function getPaths(): Promise<PathsConfig> {
+  const res = await fetch(`${API_BASE}/settings/paths`)
+  return handleResponse(res)
+}
+
+export async function getPrompts(): Promise<PromptInfo[]> {
+  const res = await fetch(`${API_BASE}/settings/prompts`)
+  return handleResponse(res)
+}
+
+export async function getPrompt(name: string): Promise<{ name: string; content: string }> {
+  const res = await fetch(`${API_BASE}/settings/prompts/${encodeURIComponent(name)}`)
+  return handleResponse(res)
+}
+
+export async function savePrompt(name: string, content: string): Promise<{ saved: boolean }> {
+  const res = await fetch(`${API_BASE}/settings/prompts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, content }),
+  })
+  return handleResponse(res)
+}
+
+export async function getVersion(): Promise<{ version: string; api_version: string }> {
+  const res = await fetch(`${API_BASE}/settings/version`)
+  return handleResponse(res)
+}
