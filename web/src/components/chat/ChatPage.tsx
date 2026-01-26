@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Copy, Check, Settings2, Search, Shield, Globe, FileText, Upload, X, Eye, AlertCircle, Paperclip, Image } from 'lucide-react'
+import { Send, Loader2, Copy, Check, Settings2, Shield, Globe, FileText, X, Paperclip, Image } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'

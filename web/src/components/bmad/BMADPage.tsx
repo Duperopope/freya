@@ -351,13 +351,6 @@ Répondez à ces questions ou posez-moi les vôtres !`,
     setBrainstormComplete(false)
   }
   
-  // Quick launch without brainstorming
-  const quickLaunch = () => {
-    if (!goal.trim()) return
-    setBrainstormComplete(true)
-    startMutation.mutate()
-  }
-
   // Skip brainstorming
   const skipBrainstorm = () => {
     setBrainstormComplete(true)

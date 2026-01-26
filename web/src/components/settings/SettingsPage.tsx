@@ -33,14 +33,9 @@ import {
   Sun,
   Monitor,
   Cloud,
-  Zap,
-  Activity,
   AlertCircle,
   CheckCircle2,
-  Clock,
-  TrendingUp,
-  DollarSign,
-  Shield
+  TrendingUp
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
