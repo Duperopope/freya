@@ -260,9 +260,20 @@ Freya is developed in Python 3.11+ with the following dependencies :
 
 ## Version
 
-Current version: **1.1.6**
+Current version: **1.1.6.1**
 
 ## Patch Notes
+
+### v1.1.6.1 (January 26, 2026)
+
+- Updated architecture diagrams to include CLI interface components
+- Enhanced interaction overview diagrams with detailed component interactions
+- Added maintenance TODO comments throughout documentation for future updates
+- Improved architecture documentation to reflect all current components and tools
+- Enhanced TUI bench interface with ASCII progress bars and improved status display
+- Added buttons to open reports and bench_runs directories directly from TUI
+- Improved import statements for better development workflow
+- Added debugging logs for bench operations
 
 ### v1.1.6 (January 26, 2026)
 

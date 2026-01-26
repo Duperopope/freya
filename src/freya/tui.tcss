@@ -72,11 +72,19 @@ Screen {
   border: solid #263041;
   padding: 1;
   background: #0f1620;
+  min-height: 7;
+  height: auto;
+  content-align: left top;
+  layout: vertical;
+  /* z-index retiré : non supporté par Textual CSS */
 }
 
 #bench_table {
   border: solid #263041;
   background: #0b0f14;
+  min-height: 6;
+  height: 1fr;
+  overflow: auto;
 }
 
 #bmad_toolbar {
@@ -136,6 +144,11 @@ Screen {
 #gp_buttons {
   height: auto;
   padding-top: 1;
+}
+
+#bench_status_block {
+  padding-bottom: 1;
+  min-height: 5;
 }
 
 .hidden { display: none; }

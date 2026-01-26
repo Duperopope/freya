@@ -1,6 +1,12 @@
 # src/freya/tui.py
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Allow running this script directly during development
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import asyncio
 import csv
 import datetime as dt
@@ -42,10 +48,10 @@ from textual.widgets import (
     Input,
 )
 
-from .config import FreyaConfig
-from .ollama_client import OllamaClient
-from .router import LLMRouter
-from .orchestrator import Orchestrator
+from freya.config import FreyaConfig
+from freya.ollama_client import OllamaClient
+from freya.router import LLMRouter
+from freya.orchestrator import Orchestrator
 
 
 # -------------------- FREE WEB HELPERS --------------------
@@ -291,6 +297,14 @@ def _pb_set(bar: ProgressBar, *, total: int, progress: int) -> None:
         pass
 
 
+def _ascii_bar(progress: int, total: int, width: int = 24) -> str:
+    total = max(1, int(total))
+    progress = max(0, min(int(progress), total))
+    ratio = progress / total
+    filled = int(ratio * width)
+    return "█" * filled + "░" * (width - filled)
+
+
 class FreyaTUI(App):
     CSS_PATH = "tui.tcss"
 
@@ -446,63 +460,79 @@ class FreyaTUI(App):
 
     def _bench_tab(self) -> Container:
         return Container(
-            Horizontal(
-                Button(f"{I_PLAY} Fast (auto)", id="btn_bench_fast", variant="primary"),
-                Button(f"{I_PLAY} Standard (resume)", id="btn_bench_resume_std"),
-                Button(f"{I_PLAY} Standard", id="btn_bench_standard"),
-                Button(f"{I_PLAY} Advanced", id="btn_bench_advanced"),
-                Button(f"{I_STOP} Stop (soft)", id="btn_bench_stop"),
-                Button("Apply routing (best)", id="btn_apply_routing"),
-                Button("Reload last session", id="btn_reload_state"),
-                Button(f"{I_SAVE} Save + {I_EXIT} Exit", id="btn_save_and_exit", variant="warning"),
-                id="bench_actions",
-            ),
-            Static(
-                f"cache={self.cfg.cache_root} • reports={self.cfg.managed_root / 'reports'} • backend={self.cfg.ollama.base_url}",
-                classes="muted",
-            ),
+            # Toolbar (match tui.tcss: #bench_toolbar)
             Container(
                 Horizontal(
-                    Static("Program:", classes="muted"),
-                    Static("—", id="bench_program"),
-                    Static("Running:", classes="muted"),
-                    Static("no", id="bench_running"),
-                    Static("Phase:", classes="muted"),
-                    Static("—", id="bench_phase"),
-                    Static("Role:", classes="muted"),
-                    Static("—", id="bench_role"),
-                    Static("Model:", classes="muted"),
-                    Static("—", id="bench_model"),
-                    id="bench_labels",
+                    Button(f"{I_PLAY} Fast", id="btn_bench_fast", variant="primary"),
+                    Button(f"{I_PLAY} Std (resume)", id="btn_bench_resume_std"),
+                    Button(f"{I_PLAY} Std", id="btn_bench_standard"),
+                    Button(f"{I_PLAY} Adv", id="btn_bench_advanced"),
+                    Button(f"{I_STOP} Stop", id="btn_bench_stop"),
+                    id="bench_actions_row1",
                 ),
                 Horizontal(
-                    Static("Models:", classes="muted"),
-                    ProgressBar(total=1, id="bench_models_bar"),
-                    Static("Steps:", classes="muted"),
-                    ProgressBar(total=1, id="bench_steps_bar"),
-                    id="bench_bars",
+                    Button("Apply routing (best)", id="btn_apply_routing"),
+                    Button("Reload last session", id="btn_reload_state"),
+                    Button("Open reports", id="btn_open_reports"),
+                    Button("Open bench_runs", id="btn_open_bench_runs"),
+                    Button(f"{I_SAVE} Save + {I_EXIT} Exit", id="btn_save_and_exit", variant="warning"),
+                    id="bench_actions_row2",
                 ),
-                Horizontal(
-                    Static("Counts:", classes="muted"),
-                    Static("models 0/0 • steps 0/0", id="bench_counts"),
-                    Static("ticks:", classes="muted"),
-                    Static("0", id="bench_ticks"),
-                    Static("events:", classes="muted"),
-                    Static("0", id="bench_events"),
-                    id="bench_counts_line",
+                Static(
+                    f"cache={self.cfg.cache_root} • reports={self.cfg.managed_root / 'reports'} • backend={self.cfg.ollama.base_url}",
+                    classes="muted",
+                    id="bench_info",
                 ),
-                Horizontal(
-                    Static("State:", classes="muted"),
-                    Static("—", id="bench_state_path"),
-                    Static("done:", classes="muted"),
-                    Static("0", id="bench_done"),
-                    Static("updated:", classes="muted"),
-                    Static("—", id="bench_updated"),
-                    Static("event:", classes="muted"),
-                    Static("—", id="bench_event"),
-                    id="bench_state_line",
+                # Status block
+                Container(
+                    Horizontal(
+                        Static("Program:", classes="muted"),
+                        Static("—", id="bench_program"),
+                        Static("Running:", classes="muted"),
+                        Static("no", id="bench_running"),
+                        Static("Phase:", classes="muted"),
+                        Static("—", id="bench_phase"),
+                        Static("Role:", classes="muted"),
+                        Static("—", id="bench_role"),
+                        Static("Model:", classes="muted"),
+                        Static("—", id="bench_model"),
+                        id="bench_labels",
+                    ),
+                    Horizontal(
+                        Static("Models:", classes="muted"),
+                        ProgressBar(total=1, id="bench_models_bar"),
+                        Static("", id="bench_models_ascii", classes="muted"),
+                        id="bench_models_row",
+                    ),
+                    Horizontal(
+                        Static("Steps:", classes="muted"),
+                        ProgressBar(total=1, id="bench_steps_bar"),
+                        Static("", id="bench_steps_ascii", classes="muted"),
+                        id="bench_steps_row",
+                    ),
+                    Horizontal(
+                        Static("Counts:", classes="muted"),
+                        Static("models 0/0 • steps 0/0", id="bench_counts"),
+                        Static("ticks:", classes="muted"),
+                        Static("0", id="bench_ticks"),
+                        Static("events:", classes="muted"),
+                        Static("0", id="bench_events"),
+                        id="bench_counts_line",
+                    ),
+                    Horizontal(
+                        Static("State:", classes="muted"),
+                        Static("—", id="bench_state_path"),
+                        Static("done:", classes="muted"),
+                        Static("0", id="bench_done"),
+                        Static("updated:", classes="muted"),
+                        Static("—", id="bench_updated"),
+                        Static("event:", classes="muted"),
+                        Static("—", id="bench_event"),
+                        id="bench_state_line",
+                    ),
+                    id="bench_status_block",
                 ),
-                id="bench_status_block",
+                id="bench_toolbar",
             ),
             Static("Live results (ALL model_done rows preserved):", classes="muted"),
             DataTable(id="bench_table"),
@@ -535,13 +565,18 @@ class FreyaTUI(App):
 
         bt = self.query_one("#bench_table", DataTable)
         bt.add_columns("role", "phase", "model", "score", "latency_ms", "status")
+        bt.styles.height = "1fr"   # CRUCIAL: table prend le reste, pas tout
 
         models_bar = self.query_one("#bench_models_bar", ProgressBar)
         steps_bar = self.query_one("#bench_steps_bar", ProgressBar)
         for bar in (models_bar, steps_bar):
+            bar.styles.display = "block"
             bar.styles.width = "1fr"
-            bar.styles.height = 1
             bar.styles.min_width = 24
+            bar.styles.height = 1
+
+        self.query_one("#bench_models_ascii", Static).styles.min_width = 32
+        self.query_one("#bench_steps_ascii", Static).styles.min_width = 32
 
         bb = self.query_one("#bb_table", DataTable)
         bb.add_columns("role", "best_model", "score", "latency_ms", "override")
@@ -557,6 +592,7 @@ class FreyaTUI(App):
             self.call_after_refresh(self._bench_autostart_a1)
 
         self._log_chat("system", "Prêt. Bench auto fast (A1). BMAD dispo via bouton.")
+        self._log_chat("system", "History restored.")
 
     def _prefer(self, candidates: list[str]) -> str:
         for c in candidates:
@@ -592,7 +628,7 @@ class FreyaTUI(App):
             sections[cur] = "\n".join(buf).strip()
         return sections.get(hat_name, "")
 
-    # -------------------- thinking (ONLY ONCE - fixed redeclaration) --------------------
+    # -------------------- thinking (single) --------------------
     def _set_thinking(self, on: bool) -> None:
         w = self.query_one("#thinking", Static)
         if on:
@@ -646,8 +682,6 @@ class FreyaTUI(App):
                         except Exception:
                             pass
 
-                    # asyncio.create_task expects a coroutine object:
-                    # https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task
                     self.call_after_refresh(lambda: asyncio.create_task(_runner()))
             except Exception:
                 pass
@@ -848,20 +882,37 @@ class FreyaTUI(App):
             while s.pending_rows:
                 rows.append(s.pending_rows.popleft())
 
-        self.query_one("#bench_program", Static).update(program)
-        self.query_one("#bench_running", Static).update("yes" if running else "no")
-        self.query_one("#bench_phase", Static).update(phase)
-        self.query_one("#bench_role", Static).update(role)
-        self.query_one("#bench_model", Static).update(model)
-        self.query_one("#bench_event", Static).update(last_event or "—")
-        self.query_one("#bench_ticks", Static).update(str(ticks))
-        self.query_one("#bench_events", Static).update(str(events))
-        self.query_one("#bench_counts", Static).update(f"models {model_i}/{total_models} • steps {step_i}/{steps_total}")
-
-        bar_models = self.query_one("#bench_models_bar", ProgressBar)
-        bar_steps = self.query_one("#bench_steps_bar", ProgressBar)
-        _pb_set(bar_models, total=total_models, progress=model_i)
-        _pb_set(bar_steps, total=steps_total, progress=step_i)
+        if not running and model_i == 0 and step_i == 0:
+            self.query_one("#bench_program", Static).update("—")
+            self.query_one("#bench_running", Static).update("non")
+            self.query_one("#bench_phase", Static).update("—")
+            self.query_one("#bench_role", Static).update("—")
+            self.query_one("#bench_model", Static).update("—")
+            self.query_one("#bench_event", Static).update("—")
+            self.query_one("#bench_ticks", Static).update("0")
+            self.query_one("#bench_events", Static).update("0")
+            self.query_one("#bench_counts", Static).update("Aucun bench en cours. Lancez un bench pour voir la progression.")
+            self.query_one("#bench_models_ascii", Static).update("")
+            self.query_one("#bench_steps_ascii", Static).update("")
+        else:
+            self.query_one("#bench_program", Static).update(program)
+            self.query_one("#bench_running", Static).update("oui" if running else "non")
+            self.query_one("#bench_phase", Static).update(phase)
+            self.query_one("#bench_role", Static).update(role)
+            self.query_one("#bench_model", Static).update(model)
+            self.query_one("#bench_event", Static).update(last_event or "—")
+            self.query_one("#bench_ticks", Static).update(str(ticks))
+            self.query_one("#bench_events", Static).update(str(events))
+            self.query_one("#bench_counts", Static).update(f"models {model_i}/{total_models} • steps {step_i}/{steps_total}")
+            bar_models = self.query_one("#bench_models_bar", ProgressBar)
+            bar_steps = self.query_one("#bench_steps_bar", ProgressBar)
+            _pb_set(bar_models, total=total_models, progress=model_i)
+            _pb_set(bar_steps, total=steps_total, progress=step_i)
+            # ASCII bars (always visible)
+            m_pct = int((model_i / max(1, total_models)) * 100)
+            s_pct = int((step_i / max(1, steps_total)) * 100)
+            self.query_one("#bench_models_ascii", Static).update(f"{_ascii_bar(model_i, total_models)} {m_pct:>3d}%")
+            self.query_one("#bench_steps_ascii", Static).update(f"{_ascii_bar(step_i, steps_total)} {s_pct:>3d}%")
 
         st_path = self._bench_state_path(program)
         self.query_one("#bench_state_path", Static).update(str(st_path))
@@ -884,6 +935,7 @@ class FreyaTUI(App):
             self._bench_start(program="bench-fast", trials=1, mode="quick", resume=True)
 
     def _bench_start(self, *, program: str, trials: int, mode: str, resume: bool) -> None:
+        self._log_chat("system", f"[DEBUG] bench_start: models={self.models}")
         with self._bench_lock:
             if self._bench.running:
                 self._log_chat("system", "Bench déjà en cours.")
@@ -912,6 +964,7 @@ class FreyaTUI(App):
         state_path = self._bench_state_path(program)
 
         def progress(evt: str, payload: dict[str, Any]) -> None:
+            self.call_from_thread(self._log_chat, "system", f"[DEBUG] progress: evt={evt} payload={payload}")
             with self._bench_lock:
                 b = self._bench
                 b.events_seen += 1
@@ -978,7 +1031,7 @@ class FreyaTUI(App):
                     except Exception:
                         pass
 
-                    # CSV report (old style)
+                    # CSV report
                     try:
                         self._append_csv_row(program, role, phase, model, score, latency_ms, status)
                     except Exception:
@@ -995,6 +1048,7 @@ class FreyaTUI(App):
                         b.last_state_updated_at = float(ua)
 
         def worker() -> None:
+            self.call_from_thread(self._log_chat, "system", f"[DEBUG] worker started")
             try:
                 kwargs: dict[str, Any] = dict(
                     roles=None,
@@ -1011,7 +1065,9 @@ class FreyaTUI(App):
                 if "should_stop" in sig.parameters:
                     kwargs["should_stop"] = lambda: bool(self._bench.stop_requested)
 
+                self.call_from_thread(self._log_chat, "system", f"[DEBUG] calling router.bench with kwargs={kwargs}")
                 self.router.bench(**kwargs)
+                self.call_from_thread(self._log_chat, "system", f"[DEBUG] router.bench finished")
 
                 self._bench_persist_bench_json()
                 self.call_from_thread(self._bench_fill_billboard_from_bench_json)
@@ -1021,6 +1077,7 @@ class FreyaTUI(App):
             finally:
                 with self._bench_lock:
                     self._bench.running = False
+                self.call_from_thread(self._log_chat, "system", f"[DEBUG] worker finished (running={self._bench.running})")
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1136,6 +1193,18 @@ class FreyaTUI(App):
             self._bench_load_table_history()
             self._log_chat("system", "Session bench rechargée (state + table + billboard).")
             return
+        if bid == "btn_open_reports":
+            self._run_ps(f'Start-Process "{self.cfg.managed_root / "reports"}"')
+            return
+        if bid == "btn_open_bench_runs":
+            self._run_ps(f'Start-Process "{self.cfg.cache_root / "bench_runs"}"')
+            return
+        if bid == "btn_open_routing":
+            self._run_ps(f'Start-Process "{self.cfg.routing_path}"')
+            return
+        if bid == "btn_open_bench_json":
+            self._run_ps(f'Start-Process "{self._bench_json_path()}"')
+            return
         if bid == "btn_save_and_exit":
             self._save_and_exit()
             return
@@ -1145,7 +1214,7 @@ class FreyaTUI(App):
             self.call_after_refresh(lambda: asyncio.create_task(self._bmad_prompt_and_run()))
             return
 
-        # others (chat/settings)
+        # others
         if bid == "btn_send":
             self.action_send_chat()
         elif bid == "btn_clear":
