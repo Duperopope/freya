@@ -241,9 +241,16 @@ Freya est développé en Python 3.11+ avec les dépendances suivantes :
 
 ## Version
 
-Version actuelle : **1.1.5**
+Version actuelle : **1.1.6**
 
 ## Notes de patch
+
+### v1.1.6 (26 janvier 2026)
+
+- Améliorations majeures de l'interface TUI avec fonctionnalités étendues
+- Mises à jour significatives du système de configuration avec de nouvelles options
+- Routage LLM amélioré et optimisations de performance
+- Commandes CLI supplémentaires et gestion améliorée des commandes
 
 ### v1.1.5 (25 janvier 2026)
 
