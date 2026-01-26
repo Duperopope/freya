@@ -241,13 +241,20 @@ def run_dev_server(host: str = "127.0.0.1", port: int = 8765):
     """Run the development server with auto-reload."""
     import uvicorn
     uvicorn.run(
-        "freya.api.main:create_app",
+        "freya.api.main:create_debug_app",
         factory=True,
         host=host,
         port=port,
         reload=True,
         log_level="info",
     )
+
+
+# Create app with auto-detected static files for debug mode
+def create_debug_app() -> FastAPI:
+    """Create app with static files and debug enabled."""
+    static_dir = get_static_dir()
+    return create_app(static_dir=static_dir, debug=True)
 
 
 # Create app with auto-detected static files for production

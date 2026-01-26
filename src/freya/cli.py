@@ -183,7 +183,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     
     # Determine which app factory to use
     if debug:
-        app_target = "freya.api.main:create_app"
+        app_target = "freya.api.main:create_debug_app"
         factory = True
     else:
         # Production mode with static files
