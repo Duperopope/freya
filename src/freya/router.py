@@ -8,13 +8,13 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable
 
 from .benchmarkq import default_bench_suite, eval_text_against_case
 from .ollama_client import OllamaClient
 
-
 ProgressCb = Callable[[str, dict[str, Any]], None]
+StopCb = Callable[[], bool]
 
 
 @dataclass(frozen=True)
@@ -38,9 +38,6 @@ _INVALID_WIN = re.compile(r'[<>:"/\\|?*\x00-\x1F]+')
 
 
 def _safe_slug(name: str, max_len: int = 80) -> str:
-    """
-    Windows-safe slug for folder/file names.
-    """
     s = name.strip()
     s = _INVALID_WIN.sub("_", s)
     s = re.sub(r"\s+", " ", s).strip()
@@ -58,15 +55,13 @@ class BenchPhase:
     name: str
     trials: int
     grid: list[dict[str, Any]]
-    # keep_top_n = None => keep all models for next phase
     keep_top_n: int | None = None
-    # timeout per generate call (seconds). None/0 => no timeout
     timeout_sec: int | None = None
 
 
 class LLMRouter:
     """
-    Bench + routing for BMAD roles using Ollama (and later other providers).
+    Bench + routing for BMAD roles using Ollama.
     """
 
     def __init__(self, client: OllamaClient):
@@ -75,10 +70,8 @@ class LLMRouter:
 
     def list_models(self) -> list[str]:
         tags = self.client.tags()
-
         models: list[str] = []
 
-        # tags peut être dict (attendu) ou list (selon ton client/wrapper)
         if isinstance(tags, dict):
             items = tags.get("models", [])
         elif isinstance(tags, list):
@@ -96,12 +89,8 @@ class LLMRouter:
         return sorted(set(models), key=str.lower)
 
     def _default_param_grid(self, mode: str) -> list[dict[str, Any]]:
-        # "quick" => one deterministic setting
         if mode == "quick":
-            return [
-                {"temperature": 0.0, "top_p": 1.0, "repeat_penalty": 1.05, "num_predict": 650}
-            ]
-        # "tune" => coarse grid
+            return [{"temperature": 0.0, "top_p": 1.0, "repeat_penalty": 1.05, "num_predict": 650}]
         return [
             {"temperature": 0.0, "top_p": 1.0, "repeat_penalty": 1.05, "num_predict": 650},
             {"temperature": 0.2, "top_p": 0.95, "repeat_penalty": 1.07, "num_predict": 750},
@@ -110,25 +99,16 @@ class LLMRouter:
         ]
 
     def _default_phases(self, program: str, mode: str, trials: int) -> list[BenchPhase]:
-        """
-        A single suite split into phases; still assigns ALL BMAD roles in every phase.
-        """
-        # You asked: "tous les fast en premier", then coarse, then advanced.
-        # - bench-fast => phase1 only
-        # - bench-standard => phase1 + phase2
-        # - bench-advanced => phase1 + phase2 + phase3
         grid_fast = self._default_param_grid("quick")
         grid_coarse = self._default_param_grid(mode)
 
         phases: list[BenchPhase] = []
-
-        # Phase 1: very fast sanity
         phases.append(
             BenchPhase(
                 name="phase1_fast",
                 trials=1,
                 grid=grid_fast,
-                keep_top_n=None,  # keep all into coarse by default (no dataset reset needed)
+                keep_top_n=None,
                 timeout_sec=int(os.environ.get("FREYA_BENCH_TIMEOUT_FAST", "0")) or None,
             )
         )
@@ -145,7 +125,6 @@ class LLMRouter:
             )
 
         if program in ("bench-advanced",):
-            # Advanced: more trials + slightly wider grid
             grid_adv = grid_coarse + [
                 {"temperature": 0.8, "top_p": 0.8, "repeat_penalty": 1.15, "num_predict": 1100},
                 {"temperature": 0.15, "top_p": 0.98, "repeat_penalty": 1.05, "num_predict": 900},
@@ -174,17 +153,8 @@ class LLMRouter:
         resume: bool = True,
         program: str = "bench-standard",
         progress: ProgressCb | None = None,
+        should_stop: StopCb | None = None,
     ) -> dict[str, list[ModelScore]]:
-        """
-        Multi-phase, phase-major benchmark:
-          phase1_fast: all roles, all models
-          phase2_coarse: all roles, narrowed models (optional keep_top_n)
-          phase3_advanced: all roles, narrowed models (optional keep_top_n)
-
-        Writes:
-          cache_dir/bench_state.json (resume)
-          cache_dir/bench_raw/<role>/<phase>/<model>/<case>/trialN.(txt|json)
-        """
         cache_dir.mkdir(parents=True, exist_ok=True)
         raw_root = cache_dir / "bench_raw"
         raw_root.mkdir(parents=True, exist_ok=True)
@@ -198,7 +168,6 @@ class LLMRouter:
         if max_models and len(installed) > max_models:
             installed = installed[:max_models]
 
-        # Load state for resume
         state: dict[str, Any] = {"done": {}, "meta": {}}
         if resume and state_path.exists():
             try:
@@ -218,24 +187,33 @@ class LLMRouter:
         }
 
         phases = self._default_phases(program, mode, trials)
-
-        # candidates_by_role starts with all models for all roles
         candidates_by_role: dict[str, list[str]] = {r: list(installed) for r in wanted_roles}
-
-        # For final results: best per role across last executed phase
-        best_by_role: dict[str, ModelScore] = {}
 
         def save_state() -> None:
             state["meta"]["updated_at"] = time.time()
             state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
+        def stopped() -> bool:
+            return bool(should_stop() if should_stop else False)
+
         try:
-            # PHASE-MAJOR LOOP (your requested order)
             for phase in phases:
+                if stopped():
+                    if progress:
+                        progress("stopped", {"where": "phase_start", "phase": phase.name})
+                    save_state()
+                    return self.scores
+
                 if progress:
                     progress("phase_start", {"phase": phase.name, "roles": wanted_roles})
 
                 for role in wanted_roles:
+                    if stopped():
+                        if progress:
+                            progress("stopped", {"where": "role_start", "phase": phase.name, "role": role})
+                        save_state()
+                        return self.scores
+
                     cases = [c for c in suite if c.role == role]
                     if not cases:
                         continue
@@ -257,6 +235,12 @@ class LLMRouter:
                     scored_models: list[ModelScore] = []
 
                     for model_i, model in enumerate(candidates, start=1):
+                        if stopped():
+                            if progress:
+                                progress("stopped", {"where": "model_start", "phase": phase.name, "role": role, "model": model})
+                            save_state()
+                            return self.scores
+
                         steps_total = len(phase.grid) * len(cases) * phase.trials
                         if progress:
                             progress(
@@ -275,19 +259,27 @@ class LLMRouter:
                         best_latency = 10**9
                         best_opts: dict[str, Any] = {}
 
-                        total_score_for_best = -10**9
-                        total_latency_for_best = 10**9
+                        best_total_score = -10**9
+                        best_total_latency = 10**9
 
-                        # Evaluate grid; choose grid setting that maximizes total score over all cases & trials
                         for grid_i, opts in enumerate(phase.grid, start=1):
+                            if stopped():
+                                if progress:
+                                    progress("stopped", {"where": "grid_start", "phase": phase.name, "role": role, "model": model})
+                                save_state()
+                                return self.scores
+
                             total_score = 0
                             total_latency = 0
-                            ok_all = True
-                            notes_all: list[str] = []
 
                             for case in cases:
                                 for t in range(1, phase.trials + 1):
-                                    # Unique resume key
+                                    if stopped():
+                                        if progress:
+                                            progress("stopped", {"where": "trial_start", "phase": phase.name, "role": role, "model": model})
+                                        save_state()
+                                        return self.scores
+
                                     k = _key(
                                         program,
                                         role,
@@ -298,29 +290,21 @@ class LLMRouter:
                                         json.dumps(opts, sort_keys=True),
                                     )
 
-                                    # If done, reuse
                                     if k in state["done"]:
                                         rec = state["done"][k]
                                         total_score += int(rec.get("score", 0))
                                         total_latency += int(rec.get("latency_ms", 0))
-                                        ok_all = ok_all and bool(rec.get("ok", True))
                                         continue
 
-                                    # Run
                                     started = time.perf_counter()
                                     ok = True
                                     score = -999999
                                     latency_ms = 999999
                                     notes = ""
+                                    text = ""
 
                                     try:
-                                        sys_prompt = (
-                                            f"You are generating a BMAD {role} artifact. "
-                                            f"Follow requirements precisely."
-                                        )
-
-                                        # Ollama API supports options per request
-                                        # Ref: https://github.com/ollama/ollama/blob/main/docs/api.md
+                                        sys_prompt = f"You are generating a BMAD {role} artifact. Follow requirements precisely."
                                         res = self.client.generate(
                                             model=model,
                                             prompt=case.prompt,
@@ -344,7 +328,6 @@ class LLMRouter:
                                     if latency_ms == 999999:
                                         latency_ms = int((ended - started) * 1000)
 
-                                    # Write raw
                                     role_slug = _safe_slug(role)
                                     phase_slug = _safe_slug(phase.name)
                                     model_slug = _safe_slug(model)
@@ -352,9 +335,7 @@ class LLMRouter:
                                     out_dir = raw_root / role_slug / phase_slug / model_slug / case_slug
                                     out_dir.mkdir(parents=True, exist_ok=True)
 
-                                    (out_dir / f"trial{t}.txt").write_text(
-                                        text if "text" in locals() else "", encoding="utf-8", errors="ignore"
-                                    )
+                                    (out_dir / f"trial{t}.txt").write_text(text, encoding="utf-8", errors="ignore")
                                     (out_dir / f"trial{t}.json").write_text(
                                         json.dumps(
                                             {
@@ -371,24 +352,16 @@ class LLMRouter:
                                                 "latency_ms": latency_ms,
                                             },
                                             indent=2,
+                                            ensure_ascii=False,
                                         ),
                                         encoding="utf-8",
                                     )
 
-                                    # Save in state
-                                    state["done"][k] = {
-                                        "score": score,
-                                        "ok": ok,
-                                        "notes": notes,
-                                        "latency_ms": latency_ms,
-                                    }
+                                    state["done"][k] = {"score": score, "ok": ok, "notes": notes, "latency_ms": latency_ms}
                                     save_state()
 
                                     total_score += score
                                     total_latency += latency_ms
-                                    ok_all = ok_all and ok
-                                    if notes:
-                                        notes_all.append(notes)
 
                                     if progress:
                                         progress(
@@ -407,18 +380,12 @@ class LLMRouter:
                                             },
                                         )
 
-                            # pick best grid setting for this model
-                            # primary: higher score, tie-break: lower latency
-                            if total_score > total_score_for_best or (
-                                total_score == total_score_for_best and total_latency < total_latency_for_best
-                            ):
-                                total_score_for_best = total_score
-                                total_latency_for_best = total_latency
+                            if total_score > best_total_score or (total_score == best_total_score and total_latency < best_total_latency):
+                                best_total_score = total_score
+                                best_total_latency = total_latency
                                 best_opts = dict(opts)
                                 best_score = total_score
                                 best_latency = total_latency
-                            if not ok_all and notes_all:
-                                pass
 
                         ms = ModelScore(
                             model=model,
@@ -443,30 +410,17 @@ class LLMRouter:
                                 },
                             )
 
-                    # Sort by score desc then latency asc
                     scored_models.sort(key=lambda x: (-x.format_score, x.latency_ms))
-                    # Store scores for role (we keep per-run phase results by overwriting role list)
                     self.scores[role] = scored_models
 
-                    # Keep best for routing summary
-                    if scored_models:
-                        best_by_role[role] = scored_models[0]
-
-                    # Narrow candidates for next phase if requested
                     if phase.keep_top_n is not None and phase.keep_top_n > 0:
                         candidates_by_role[role] = [m.model for m in scored_models[: phase.keep_top_n]]
                     else:
                         candidates_by_role[role] = [m.model for m in scored_models]
 
                     if progress:
-                        progress(
-                            "role_done",
-                            {
-                                "role": role,
-                                "phase": phase.name,
-                                "top_model": best_by_role[role].model if role in best_by_role else None,
-                            },
-                        )
+                        top_model = scored_models[0].model if scored_models else None
+                        progress("role_done", {"role": role, "phase": phase.name, "top_model": top_model})
 
                 if progress:
                     progress("phase_done", {"phase": phase.name})
@@ -485,6 +439,5 @@ class LLMRouter:
             return scores[0].model
         if fallback:
             return fallback
-        # last-resort: pick any model
         models = self.list_models()
         return models[0] if models else ""

@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import datetime as dt
 import inspect
 import json
+import logging
 import os
 import re
 import subprocess
@@ -12,9 +14,10 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Awaitable, Coroutine, cast
+from typing import Any, Awaitable, Deque, cast
 
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -42,6 +45,7 @@ from textual.widgets import (
 from .config import FreyaConfig
 from .ollama_client import OllamaClient
 from .router import LLMRouter
+from .orchestrator import Orchestrator
 
 
 # -------------------- FREE WEB HELPERS --------------------
@@ -52,10 +56,14 @@ def fetch_json(url: str, timeout: int = 20) -> Any:
 
 
 def wiki_search(query: str, limit: int = 5) -> list[dict[str, str]]:
-    # Wikipedia OpenSearch (free)
-    # https://www.mediawiki.org/wiki/API:Main_page
     params = urllib.parse.urlencode(
-        {"action": "opensearch", "search": query, "limit": str(max(1, min(limit, 10))), "namespace": "0", "format": "json"}
+        {
+            "action": "opensearch",
+            "search": query,
+            "limit": str(max(1, min(limit, 10))),
+            "namespace": "0",
+            "format": "json",
+        }
     )
     url = f"https://en.wikipedia.org/w/api.php?{params}"
     req = urllib.request.Request(url, headers={"User-Agent": "Freya/1.0"})
@@ -66,7 +74,13 @@ def wiki_search(query: str, limit: int = 5) -> list[dict[str, str]]:
     links = data[3] if len(data) > 3 else []
     out: list[dict[str, str]] = []
     for i in range(min(len(titles), limit)):
-        out.append({"title": str(titles[i]), "snippet": str(descs[i]) if i < len(descs) else "", "url": str(links[i]) if i < len(links) else ""})
+        out.append(
+            {
+                "title": str(titles[i]),
+                "snippet": str(descs[i]) if i < len(descs) else "",
+                "url": str(links[i]) if i < len(links) else "",
+            }
+        )
     return out
 
 
@@ -86,8 +100,6 @@ def redact(text: str) -> str:
 
 
 def copy_clipboard_windows(text: str) -> None:
-    # https://learn.microsoft.com/powershell/module/microsoft.powershell.management/set-clipboard
-    import subprocess
     subprocess.run(
         ["powershell", "-NoProfile", "-Command", "Set-Clipboard -Value ([Console]::In.ReadToEnd())"],
         input=text,
@@ -110,9 +122,10 @@ I_PLAY = icon("󰐊", "START")
 I_STOP = icon("󰓛", "STOP")
 I_WEB = icon("󰖟", "WEB")
 I_OPEN = icon("󰏌", "OPEN")
+I_SAVE = icon("󰆓", "SAVE")
+I_EXIT = icon("󰗼", "EXIT")
 
 
-# -------------------- EDITABLE PROMPTS STORE (NO EXTRA MODULE) --------------------
 DEFAULT_CHAT_BASE_FR = """Tu es Freya. Tu réponds en français, de façon claire, structurée et utile.
 
 Sécurité / cadre:
@@ -189,7 +202,6 @@ class PromptStoreLite:
         return sorted([p.stem for p in d.glob("*.md")])
 
 
-# -------------------- MODAL GOAL --------------------
 class GoalPrompt(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         yield Container(
@@ -216,7 +228,69 @@ class GoalPrompt(ModalScreen[str | None]):
             self.dismiss(txt if txt else None)
 
 
-# -------------------- APP --------------------
+# -------------------- BENCH STATE --------------------
+@dataclass
+class BenchLiveState:
+    running: bool = False
+    program: str = "bench-fast"
+    phase: str = "—"
+    role: str = "—"
+    model: str = "—"
+
+    model_i: int = 0
+    total_models: int = 1
+    step_i: int = 0
+    steps_total: int = 1
+
+    last_event: str = ""
+    stop_requested: bool = False
+    last_state_done: int = 0
+    last_state_updated_at: float | None = None
+
+    ticks_seen: int = 0
+    events_seen: int = 0
+
+    pending_rows: Deque[tuple[str, str, str, str, str, str]] = field(default_factory=lambda: deque(maxlen=8000))
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    try:
+        if path.exists():
+            j = json.loads(path.read_text(encoding="utf-8"))
+            return j if isinstance(j, dict) else {}
+    except Exception:
+        pass
+    return {}
+
+
+def _write_json(path: Path, obj: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(obj, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _write_jsonl(path: Path, obj: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+
+
+def _pb_set(bar: ProgressBar, *, total: int, progress: int) -> None:
+    total = max(1, int(total))
+    progress = max(0, min(int(progress), total))
+    upd = getattr(bar, "update", None)
+    if callable(upd):
+        try:
+            upd(total=total, progress=progress)
+            return
+        except Exception:
+            pass
+    try:
+        bar.total = total
+        bar.progress = progress
+    except Exception:
+        pass
+
+
 class FreyaTUI(App):
     CSS_PATH = "tui.tcss"
 
@@ -236,13 +310,29 @@ class FreyaTUI(App):
 
         self.models: list[str] = []
         self.last_assistant: str = ""
-        self.thinking = False
-
         self.output_root: Path = self.cfg.output_root
 
-        self._bench_running = False
-        self._override_by_role: dict[str, str] = self._load_overrides()
+        self._bench_lock = threading.Lock()
+        self._bench = BenchLiveState()
 
+        self._override_by_role: dict[str, str] = self._load_overrides()
+        self.selected_artifact: Path | None = None
+
+        self._exiting = False
+
+    # -------------------- forced-save on exit --------------------
+    def exit(self, *args: Any, **kwargs: Any) -> None:
+        if not self._exiting:
+            self._exiting = True
+            try:
+                with self._bench_lock:
+                    self._bench.stop_requested = True
+                self._save_everything_best_effort()
+            except Exception:
+                pass
+        return super().exit(*args, **kwargs)
+
+    # -------------------- layout --------------------
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
 
@@ -255,9 +345,7 @@ class FreyaTUI(App):
                         yield self._chat_composer()
 
                     with TabPane(f"{I_BENCH} Benchmark", id="tab_bench"):
-                        yield self._bench_toolbar()
-                        yield DataTable(id="bench_table")
-                        yield self._billboard()
+                        yield self._bench_tab()
 
                     with TabPane(f"{I_DEV} Webdeveloper (BMAD)", id="tab_bmad"):
                         yield self._bmad_toolbar()
@@ -274,7 +362,7 @@ class FreyaTUI(App):
 
         yield Footer()
 
-    # -------- UI blocks --------
+    # -------------------- UI blocks --------------------
     def _chat_toolbar(self) -> Container:
         return Container(
             Horizontal(
@@ -306,20 +394,38 @@ class FreyaTUI(App):
             id="chat_composer",
         )
 
-    def _bench_toolbar(self) -> Container:
+    def _settings_panel(self) -> Container:
+        roles = self.store.list_roles() or list(DEFAULT_ROLE_PROMPTS.keys())
         return Container(
+            Static("Prompts (éditables)", id="set_title"),
             Horizontal(
-                Button(f"{I_PLAY} Bench standard", id="btn_bench_start", variant="primary"),
-                Button(f"{I_STOP} Stop (soft)", id="btn_bench_stop"),
-                Static("Phase: —", id="bench_phase"),
-                Static("Role:", classes="muted"),
-                ProgressBar(total=100, id="bench_role_bar"),
-                Static("Model:", classes="muted"),
-                ProgressBar(total=100, id="bench_model_bar"),
-                id="bench_row1",
+                Static("BMAD role:", classes="muted"),
+                Select([(r, r) for r in roles], id="role_select"),
+                Button("Load", id="btn_load_role"),
+                Button("Save", id="btn_save_role", variant="primary"),
+                id="set_row1",
             ),
-            Static("Bench live + billboard. Override possible par rôle.", classes="muted"),
-            id="bench_toolbar",
+            TextArea(id="role_prompt"),
+            Static("Web search: gratuit via Wikipedia API (/search ...).", classes="muted"),
+            id="settings_panel",
+        )
+
+    def _bmad_toolbar(self) -> Container:
+        return Container(
+            Static("BMAD Studio: lance un cycle BMAD et écrit des artefacts dans Output.", id="bmad_overview"),
+            Horizontal(
+                Button("Run BMAD…", id="btn_bmad_run", variant="primary"),
+                Button("Refresh artefacts", id="btn_refresh_artifacts"),
+                Button(f"{I_OPEN} VS Code", id="btn_open_vscode"),
+                id="bmad_actions",
+            ),
+            Horizontal(
+                Static("Output:", classes="muted"),
+                Input(value=str(self.output_root), id="out_dir"),
+                Button("Set", id="btn_set_out", variant="primary"),
+                id="bmad_out_row",
+            ),
+            id="bmad_toolbar",
         )
 
     def _billboard(self) -> Container:
@@ -338,52 +444,74 @@ class FreyaTUI(App):
             id="bench_billboard",
         )
 
-    def _bmad_toolbar(self) -> Container:
+    def _bench_tab(self) -> Container:
         return Container(
-            Static(
-                "BMAD Studio (user friendly)\n"
-                "1) Choisis un dossier de sortie\n"
-                "2) Donne un objectif\n"
-                "3) Freya tente de produire artefacts + code\n",
-                id="bmad_overview",
-            ),
             Horizontal(
-                Static("Output:", classes="muted"),
-                Input(value=str(self.output_root), id="out_dir"),
-                Button("Set", id="btn_set_out", variant="primary"),
-                Button(f"{I_OPEN} VS Code", id="btn_open_vscode"),
-                Button("Sync BMAD", id="btn_sync_bmad"),
-                Button("Run BMAD (goal)", id="btn_run_bmad", variant="primary"),
-                Button("Refresh artefacts", id="btn_refresh_artifacts"),
-                id="bmad_actions",
+                Button(f"{I_PLAY} Fast (auto)", id="btn_bench_fast", variant="primary"),
+                Button(f"{I_PLAY} Standard (resume)", id="btn_bench_resume_std"),
+                Button(f"{I_PLAY} Standard", id="btn_bench_standard"),
+                Button(f"{I_PLAY} Advanced", id="btn_bench_advanced"),
+                Button(f"{I_STOP} Stop (soft)", id="btn_bench_stop"),
+                Button("Apply routing (best)", id="btn_apply_routing"),
+                Button("Reload last session", id="btn_reload_state"),
+                Button(f"{I_SAVE} Save + {I_EXIT} Exit", id="btn_save_and_exit", variant="warning"),
+                id="bench_actions",
             ),
-            id="bmad_toolbar",
-        )
-
-    def _settings_panel(self) -> Container:
-        roles = self.store.list_roles() or list(DEFAULT_ROLE_PROMPTS.keys())
-        return Container(
-            Static("Prompts (éditables)", id="set_title"),
-            Horizontal(
-                Static("BMAD role:", classes="muted"),
-                Select([(r, r) for r in roles], id="role_select"),
-                Button("Load", id="btn_load_role"),
-                Button("Save", id="btn_save_role", variant="primary"),
-                id="set_row1",
-            ),
-            TextArea(id="role_prompt"),
-            Static("Notes", id="set_notes"),
             Static(
-                "Web search: gratuit via Wikipedia API (/search ...).\n"
-                "Icônes: activer une Nerd Font dans Windows Terminal.",
+                f"cache={self.cfg.cache_root} • reports={self.cfg.managed_root / 'reports'} • backend={self.cfg.ollama.base_url}",
                 classes="muted",
             ),
-            id="settings_panel",
+            Container(
+                Horizontal(
+                    Static("Program:", classes="muted"),
+                    Static("—", id="bench_program"),
+                    Static("Running:", classes="muted"),
+                    Static("no", id="bench_running"),
+                    Static("Phase:", classes="muted"),
+                    Static("—", id="bench_phase"),
+                    Static("Role:", classes="muted"),
+                    Static("—", id="bench_role"),
+                    Static("Model:", classes="muted"),
+                    Static("—", id="bench_model"),
+                    id="bench_labels",
+                ),
+                Horizontal(
+                    Static("Models:", classes="muted"),
+                    ProgressBar(total=1, id="bench_models_bar"),
+                    Static("Steps:", classes="muted"),
+                    ProgressBar(total=1, id="bench_steps_bar"),
+                    id="bench_bars",
+                ),
+                Horizontal(
+                    Static("Counts:", classes="muted"),
+                    Static("models 0/0 • steps 0/0", id="bench_counts"),
+                    Static("ticks:", classes="muted"),
+                    Static("0", id="bench_ticks"),
+                    Static("events:", classes="muted"),
+                    Static("0", id="bench_events"),
+                    id="bench_counts_line",
+                ),
+                Horizontal(
+                    Static("State:", classes="muted"),
+                    Static("—", id="bench_state_path"),
+                    Static("done:", classes="muted"),
+                    Static("0", id="bench_done"),
+                    Static("updated:", classes="muted"),
+                    Static("—", id="bench_updated"),
+                    Static("event:", classes="muted"),
+                    Static("—", id="bench_event"),
+                    id="bench_state_line",
+                ),
+                id="bench_status_block",
+            ),
+            Static("Live results (ALL model_done rows preserved):", classes="muted"),
+            DataTable(id="bench_table"),
+            self._billboard(),
+            id="bench_tab",
         )
 
-    # -------- lifecycle --------
+    # -------------------- lifecycle --------------------
     def on_mount(self) -> None:
-        # load models
         try:
             self.models = self.router.list_models()
         except Exception:
@@ -395,40 +523,40 @@ class FreyaTUI(App):
         self.query_one("#summarizer_model", Select).set_options([(m, m) for m in self.models])
         self.query_one("#ov_model", Select).set_options([(m, m) for m in self.models])
 
-        self.query_one("#primary_model", Select).value = self._prefer(["llama3.1:8b", "mistral:7b", "qwen3:8b"])
-        self.query_one("#summarizer_model", Select).value = self._prefer(["llama3.1:8b", "qwen2.5-coder:7b", "mistral:7b"])
+        self.query_one("#primary_model", Select).value = self._prefer(["dolphin-llama3:8b", "llama3.1:8b", "mistral:7b"])
+        self.query_one("#summarizer_model", Select).value = self._prefer(["llama3.1:8b", "mistral:7b"])
 
-        # hats from file
         hats = self._hat_options()
         self.query_one("#hat_select", Select).set_options(hats)
         self.query_one("#hat_select", Select).value = hats[0][0]
 
-        # chat base prompt editable
-        cb = self.query_one("#chat_base_prompt", TextArea)
-        cb.border_title = "Chat base FR — éditable (.freya/config/prompts/chat_base_fr.md)"
-        cb.text = self.store.load("chat_base_fr.md")
-
-        ci = self.query_one("#chat_input", TextArea)
-        ci.border_title = "Message (Ctrl+Enter envoyer) • /search <requête>"
-        ci.text = ""
-
-        # settings role prompt
-        rp = self.query_one("#role_prompt", TextArea)
-        rp.border_title = "Prompt BMAD role — éditable (.freya/config/prompts/bmad_roles/<role>.md)"
+        self.query_one("#chat_base_prompt", TextArea).text = self.store.load("chat_base_fr.md")
         self._load_role_prompt("analyst")
 
-        # tables
         bt = self.query_one("#bench_table", DataTable)
         bt.add_columns("role", "phase", "model", "score", "latency_ms", "status")
+
+        models_bar = self.query_one("#bench_models_bar", ProgressBar)
+        steps_bar = self.query_one("#bench_steps_bar", ProgressBar)
+        for bar in (models_bar, steps_bar):
+            bar.styles.width = "1fr"
+            bar.styles.height = 1
+            bar.styles.min_width = 24
 
         bb = self.query_one("#bb_table", DataTable)
         bb.add_columns("role", "best_model", "score", "latency_ms", "override")
 
-        # artifacts
         self._ensure_output_root()
         self._refresh_tree()
 
-        self._log_chat("system", "Prêt. Chat FR. Cyber Watch gratuit. /search gratuit (Wikipedia).")
+        self._bench_reload_last_session()
+        self._bench_load_table_history()
+        self.set_interval(0.12, self._bench_tick_ui)
+
+        if os.environ.get("FREYA_AUTOBENCH", "1") == "1":
+            self.call_after_refresh(self._bench_autostart_a1)
+
+        self._log_chat("system", "Prêt. Bench auto fast (A1). BMAD dispo via bouton.")
 
     def _prefer(self, candidates: list[str]) -> str:
         for c in candidates:
@@ -436,7 +564,7 @@ class FreyaTUI(App):
                 return c
         return self.models[0]
 
-    # -------- hats parsing --------
+    # -------------------- hats parsing --------------------
     def _hat_options(self) -> list[tuple[str, str]]:
         txt = self.store.load("chat_hat_presets.md")
         names: list[str] = []
@@ -464,7 +592,7 @@ class FreyaTUI(App):
             sections[cur] = "\n".join(buf).strip()
         return sections.get(hat_name, "")
 
-    # -------- logging + thinking --------
+    # -------------------- thinking (ONLY ONCE - fixed redeclaration) --------------------
     def _set_thinking(self, on: bool) -> None:
         w = self.query_one("#thinking", Static)
         if on:
@@ -472,6 +600,7 @@ class FreyaTUI(App):
         else:
             w.add_class("hidden")
 
+    # -------------------- chat logging --------------------
     def _log_chat(self, role: str, content: str) -> None:
         log = self.query_one("#chat_log", RichLog)
         ts = dt.datetime.now().strftime("%H:%M:%S")
@@ -487,7 +616,12 @@ class FreyaTUI(App):
         else:
             log.write(f"[{role}] {content}")
 
-    # -------- artifacts tree (no recreate) --------
+    def _log_bmad(self, content: str, title: str = "BMAD") -> None:
+        log = self.query_one("#bmad_log", RichLog)
+        ts = dt.datetime.now().strftime("%H:%M:%S")
+        log.write(Panel(Markdown(redact(content)), title=f"{title} • {ts}", border_style="yellow"))
+
+    # -------------------- artifacts tree --------------------
     def _ensure_output_root(self) -> None:
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.query_one("#art_root", Static).update(f"Output: {self.output_root}")
@@ -498,6 +632,7 @@ class FreyaTUI(App):
             tree.path = self.output_root
         except Exception:
             pass
+
         reload_fn = getattr(tree, "reload", None)
         if callable(reload_fn):
             try:
@@ -508,14 +643,11 @@ class FreyaTUI(App):
                     async def _runner() -> None:
                         try:
                             await aw
-                        except Exception as e:
-                            # logging robuste (Textual a self.log)
-                            try:
-                                self.log.error("Artifacts tree reload failed: %r", e)
-                            except Exception:
-                                pass
+                        except Exception:
+                            pass
 
-                    # Après le refresh UI, on schedule une VRAIE coroutine (_runner())
+                    # asyncio.create_task expects a coroutine object:
+                    # https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task
                     self.call_after_refresh(lambda: asyncio.create_task(_runner()))
             except Exception:
                 pass
@@ -534,20 +666,17 @@ class FreyaTUI(App):
         except Exception as e:
             pr.write(Panel(Markdown(f"Erreur: {type(e).__name__}: {e}"), title="Erreur", border_style="red"))
 
-    # -------- settings (role prompts) --------
+    # -------------------- settings role prompt --------------------
     def _load_role_prompt(self, role: str) -> None:
         self.query_one("#role_prompt", TextArea).text = self.store.load(f"bmad_roles/{role}.md")
 
-    def _save_role_prompt(self, role: str) -> None:
-        self.store.save(f"bmad_roles/{role}.md", self.query_one("#role_prompt", TextArea).text or "")
-        self._log_chat("system", f"Prompt sauvegardé: bmad_roles/{role}.md")
-
-    # -------- overrides --------
+    # -------------------- overrides --------------------
     def _load_overrides(self) -> dict[str, str]:
         p = self.cfg.routing_override_path
         try:
             if p.exists():
-                return json.loads(p.read_text(encoding="utf-8"))
+                data = json.loads(p.read_text(encoding="utf-8"))
+                return data if isinstance(data, dict) else {}
         except Exception:
             pass
         return {}
@@ -555,13 +684,468 @@ class FreyaTUI(App):
     def _save_overrides(self) -> None:
         p = self.cfg.routing_override_path
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(self._override_by_role, indent=2), encoding="utf-8")
+        p.write_text(json.dumps(self._override_by_role, indent=2, ensure_ascii=False), encoding="utf-8")
         self._log_chat("system", f"Overrides sauvegardés: {p}")
 
-    # -------- button events --------
+    # -------------------- BENCH persistence + reports --------------------
+    def _bench_cache_dir(self, program: str) -> Path:
+        return self.cfg.cache_root / "bench_runs" / program
+
+    def _bench_state_path(self, program: str) -> Path:
+        return self._bench_cache_dir(program) / "bench_state.json"
+
+    def _bench_json_path(self) -> Path:
+        return self.cfg.cache_root / "bench.json"
+
+    def _bench_table_jsonl(self, program: str) -> Path:
+        return self._bench_cache_dir(program) / "bench_table.jsonl"
+
+    def _reports_dir(self, program: str) -> Path:
+        return self.cfg.managed_root / "reports" / program
+
+    def _csv_path(self, program: str, role: str, phase: str) -> Path:
+        role = (role or "unknown").strip() or "unknown"
+        phase = (phase or "unknown").strip() or "unknown"
+        return self._reports_dir(program) / f"{role}.{phase}.csv"
+
+    def _append_csv_row(self, program: str, role: str, phase: str, model: str, score: str, latency_ms: str, status: str) -> None:
+        path = self._csv_path(program, role, phase)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        new_file = not path.exists()
+        with path.open("a", encoding="utf-8", newline="") as f:
+            w = csv.writer(f)
+            if new_file:
+                w.writerow(["ts", "program", "role", "phase", "model", "score", "latency_ms", "status"])
+            w.writerow([dt.datetime.now().isoformat(timespec="seconds"), program, role, phase, model, score, latency_ms, status])
+
+    def _bench_fill_billboard_from_bench_json(self) -> None:
+        bb = self.query_one("#bb_table", DataTable)
+        bb.clear()
+        bb.add_columns("role", "best_model", "score", "latency_ms", "override")
+
+        bench_json = _read_json(self._bench_json_path())
+        if not bench_json:
+            return
+
+        for role, arr in bench_json.items():
+            if not isinstance(arr, list) or not arr:
+                continue
+            best = arr[0] if isinstance(arr[0], dict) else None
+            if not best:
+                continue
+            ov = self._override_by_role.get(str(role), "")
+            bb.add_row(
+                str(role),
+                str(best.get("model", "")),
+                str(best.get("format_score", "")),
+                str(best.get("latency_ms", "")),
+                ov,
+            )
+
+    def _bench_persist_bench_json(self) -> None:
+        out: dict[str, list[dict[str, Any]]] = {}
+        for role, lst in self.router.scores.items():
+            rows: list[dict[str, Any]] = []
+            for s in lst:
+                rows.append(
+                    {
+                        "model": s.model,
+                        "latency_ms": int(s.latency_ms),
+                        "format_score": int(s.format_score),
+                        "role": s.role,
+                        "options": dict(s.options or {}),
+                    }
+                )
+            out[str(role)] = rows
+        _write_json(self._bench_json_path(), out)
+
+    def _apply_routing_best(self) -> None:
+        if not self.router.scores:
+            self._log_chat("system", "Pas de scores en mémoire. Lance/resume un bench.")
+            return
+        routing: dict[str, Any] = {}
+        for role, lst in self.router.scores.items():
+            if not lst:
+                continue
+            best = lst[0]
+            routing[str(role)] = {"model": best.model, "options": dict(best.options or {})}
+        _write_json(self.cfg.routing_path, routing)
+        self._log_chat("system", f"routing.json écrit: {self.cfg.routing_path}")
+
+    def _bench_load_table_history(self) -> None:
+        with self._bench_lock:
+            program = self._bench.program
+        p = self._bench_table_jsonl(program)
+        if not p.exists():
+            return
+        t = self.query_one("#bench_table", DataTable)
+        try:
+            lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except Exception:
+            return
+        for line in lines[-800:]:
+            try:
+                obj = json.loads(line)
+                if obj.get("type") != "model_done":
+                    continue
+                t.add_row(
+                    str(obj.get("role", "")),
+                    str(obj.get("phase", "")),
+                    str(obj.get("model", "")),
+                    str(obj.get("score", "")),
+                    str(obj.get("latency_ms", "")),
+                    str(obj.get("status", "")),
+                )
+            except Exception:
+                continue
+
+    def _bench_reload_last_session(self) -> None:
+        programs = ["bench-standard", "bench-advanced", "bench-fast"]
+        existing = [(p, self._bench_state_path(p)) for p in programs if self._bench_state_path(p).exists()]
+        if existing:
+            existing.sort(key=lambda x: x[1].stat().st_mtime, reverse=True)
+            program = existing[0][0]
+        else:
+            program = "bench-fast"
+
+        st_path = self._bench_state_path(program)
+        state = _read_json(st_path)
+        meta = state.get("meta", {}) if isinstance(state.get("meta", {}), dict) else {}
+        done = state.get("done", {}) if isinstance(state.get("done", {}), dict) else {}
+        updated_at = meta.get("updated_at")
+
+        with self._bench_lock:
+            self._bench.program = program
+            self._bench.last_state_done = len(done)
+            self._bench.last_state_updated_at = float(updated_at) if isinstance(updated_at, (int, float)) else None
+
+        self._bench_fill_billboard_from_bench_json()
+
+    # -------------------- BENCH ticker --------------------
+    def _bench_tick_ui(self) -> None:
+        with self._bench_lock:
+            s = self._bench
+            s.ticks_seen += 1
+
+            program = s.program
+            running = s.running
+            phase = s.phase
+            role = s.role
+            model = s.model
+            last_event = s.last_event
+
+            ticks = s.ticks_seen
+            events = s.events_seen
+            model_i = s.model_i
+            total_models = s.total_models
+            step_i = s.step_i
+            steps_total = s.steps_total
+
+            last_state_done = s.last_state_done
+            last_state_updated_at = s.last_state_updated_at
+
+            rows: list[tuple[str, str, str, str, str, str]] = []
+            while s.pending_rows:
+                rows.append(s.pending_rows.popleft())
+
+        self.query_one("#bench_program", Static).update(program)
+        self.query_one("#bench_running", Static).update("yes" if running else "no")
+        self.query_one("#bench_phase", Static).update(phase)
+        self.query_one("#bench_role", Static).update(role)
+        self.query_one("#bench_model", Static).update(model)
+        self.query_one("#bench_event", Static).update(last_event or "—")
+        self.query_one("#bench_ticks", Static).update(str(ticks))
+        self.query_one("#bench_events", Static).update(str(events))
+        self.query_one("#bench_counts", Static).update(f"models {model_i}/{total_models} • steps {step_i}/{steps_total}")
+
+        bar_models = self.query_one("#bench_models_bar", ProgressBar)
+        bar_steps = self.query_one("#bench_steps_bar", ProgressBar)
+        _pb_set(bar_models, total=total_models, progress=model_i)
+        _pb_set(bar_steps, total=steps_total, progress=step_i)
+
+        st_path = self._bench_state_path(program)
+        self.query_one("#bench_state_path", Static).update(str(st_path))
+        self.query_one("#bench_done", Static).update(str(last_state_done))
+        if last_state_updated_at:
+            self.query_one("#bench_updated", Static).update(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last_state_updated_at)))
+        else:
+            self.query_one("#bench_updated", Static).update("—")
+
+        if rows:
+            t = self.query_one("#bench_table", DataTable)
+            for r in rows:
+                t.add_row(*r)
+
+    # -------------------- BENCH start --------------------
+    def _bench_autostart_a1(self) -> None:
+        if self._bench_state_path("bench-standard").exists():
+            self._bench_start(program="bench-standard", trials=5, mode="tune", resume=True)
+        else:
+            self._bench_start(program="bench-fast", trials=1, mode="quick", resume=True)
+
+    def _bench_start(self, *, program: str, trials: int, mode: str, resume: bool) -> None:
+        with self._bench_lock:
+            if self._bench.running:
+                self._log_chat("system", "Bench déjà en cours.")
+                return
+            self._bench = BenchLiveState(
+                running=True,
+                program=program,
+                phase="(starting)",
+                role="—",
+                model="—",
+                model_i=0,
+                total_models=max(1, len(self.models)),
+                step_i=0,
+                steps_total=1,
+                last_event="start",
+                stop_requested=False,
+            )
+
+        bt = self.query_one("#bench_table", DataTable)
+        bt.clear()
+        bt.add_columns("role", "phase", "model", "score", "latency_ms", "status")
+        self._bench_load_table_history()
+
+        cache_dir = self._bench_cache_dir(program)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        state_path = self._bench_state_path(program)
+
+        def progress(evt: str, payload: dict[str, Any]) -> None:
+            with self._bench_lock:
+                b = self._bench
+                b.events_seen += 1
+                b.last_event = evt
+
+                if evt == "phase_start":
+                    b.phase = str(payload.get("phase", "—"))
+                    b.role = "—"
+                    b.model = "—"
+                    b.model_i = 0
+                    b.step_i = 0
+                    b.steps_total = 1
+
+                elif evt == "role_start":
+                    b.role = str(payload.get("role", "—"))
+
+                elif evt == "model_start":
+                    b.role = str(payload.get("role", b.role))
+                    b.model = str(payload.get("model", "—"))
+                    try:
+                        b.model_i = int(payload.get("model_i", b.model_i))
+                    except Exception:
+                        pass
+                    try:
+                        b.total_models = int(payload.get("total_models", b.total_models)) or b.total_models
+                    except Exception:
+                        pass
+                    try:
+                        b.steps_total = int(payload.get("steps_total", b.steps_total)) or b.steps_total
+                    except Exception:
+                        pass
+                    b.step_i = 0
+
+                elif evt == "step_done":
+                    b.step_i = min(b.steps_total, b.step_i + 1)
+
+                elif evt == "model_done":
+                    role = str(payload.get("role", ""))
+                    phase = str(payload.get("phase", b.phase))
+                    model = str(payload.get("model", ""))
+                    score = str(payload.get("score", ""))
+                    latency_ms = str(payload.get("latency_ms", ""))
+                    status = str(payload.get("status", ""))
+
+                    row = (role, phase, model, score, latency_ms, status)
+                    b.pending_rows.append(row)
+
+                    # JSONL history (resume UI)
+                    try:
+                        _write_jsonl(
+                            self._bench_table_jsonl(program),
+                            {
+                                "type": "model_done",
+                                "ts": time.time(),
+                                "program": program,
+                                "role": role,
+                                "phase": phase,
+                                "model": model,
+                                "score": score,
+                                "latency_ms": latency_ms,
+                                "status": status,
+                            },
+                        )
+                    except Exception:
+                        pass
+
+                    # CSV report (old style)
+                    try:
+                        self._append_csv_row(program, role, phase, model, score, latency_ms, status)
+                    except Exception:
+                        pass
+
+                # read bench_state.json for done/updated_at
+                if state_path.exists():
+                    st = _read_json(state_path)
+                    done = st.get("done", {}) if isinstance(st.get("done", {}), dict) else {}
+                    meta = st.get("meta", {}) if isinstance(st.get("meta", {}), dict) else {}
+                    b.last_state_done = len(done)
+                    ua = meta.get("updated_at")
+                    if isinstance(ua, (int, float)):
+                        b.last_state_updated_at = float(ua)
+
+        def worker() -> None:
+            try:
+                kwargs: dict[str, Any] = dict(
+                    roles=None,
+                    models=None,
+                    max_models=0,
+                    trials=trials,
+                    mode=mode,
+                    cache_dir=cache_dir,
+                    resume=resume,
+                    program=program,
+                    progress=progress,
+                )
+                sig = inspect.signature(self.router.bench)
+                if "should_stop" in sig.parameters:
+                    kwargs["should_stop"] = lambda: bool(self._bench.stop_requested)
+
+                self.router.bench(**kwargs)
+
+                self._bench_persist_bench_json()
+                self.call_from_thread(self._bench_fill_billboard_from_bench_json)
+                self.call_from_thread(self._log_chat, "system", f"Bench terminé: {program} (resume={resume})")
+            except Exception as e:
+                self.call_from_thread(self._log_chat, "system", f"Bench error: {type(e).__name__}: {e}")
+            finally:
+                with self._bench_lock:
+                    self._bench.running = False
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    # -------------------- save / close --------------------
+    def _save_everything_best_effort(self) -> None:
+        try:
+            self._save_overrides()
+        except Exception:
+            pass
+        try:
+            base = self.query_one("#chat_base_prompt", TextArea).text or ""
+            self.store.save("chat_base_fr.md", base)
+        except Exception:
+            pass
+        try:
+            role = str(self.query_one("#role_select", Select).value or "")
+            if role:
+                txt = self.query_one("#role_prompt", TextArea).text or ""
+                self.store.save(f"bmad_roles/{role}.md", txt)
+        except Exception:
+            pass
+        try:
+            if getattr(self.router, "scores", None):
+                self._bench_persist_bench_json()
+        except Exception:
+            pass
+
+    def _save_and_exit(self) -> None:
+        with self._bench_lock:
+            running = bool(self._bench.running)
+            self._bench.stop_requested = True
+
+        self._save_everything_best_effort()
+
+        if not running:
+            self.exit()
+            return
+
+        self._log_chat("system", "Bench en cours: stop soft demandé. Fermeture dès que possible (timeout 10s).")
+        deadline = time.time() + 10.0
+        timer_ref: dict[str, Any] = {"timer": None}
+
+        def _poll_exit() -> None:
+            with self._bench_lock:
+                still = bool(self._bench.running)
+            if (not still) or time.time() >= deadline:
+                t = timer_ref.get("timer")
+                if t is not None:
+                    try:
+                        t.stop()
+                    except Exception:
+                        pass
+                self.exit()
+
+        timer_ref["timer"] = self.set_interval(0.25, _poll_exit)
+
+    # -------------------- BMAD run --------------------
+    async def _bmad_prompt_and_run(self) -> None:
+        goal = await self.push_screen_wait(GoalPrompt())
+        if not goal:
+            return
+
+        self._log_bmad(f"### Goal\n\n{goal}", title="BMAD Goal")
+        self._log_bmad("Lancement Orchestrator.run_bmad_cycle(...) en background…", title="BMAD")
+
+        def worker() -> None:
+            try:
+                logger = logging.getLogger("freya")
+                orch = Orchestrator(self.cfg, logger)
+                out = orch.run_bmad_cycle(goal)
+                lines = ["### Terminé", "", "Artefacts:"]
+                for p in out:
+                    lines.append(f"- `{p}`")
+                self.call_from_thread(self._log_bmad, "\n".join(lines), "BMAD")
+            except Exception as e:
+                self.call_from_thread(self._log_bmad, f"Erreur: {type(e).__name__}: {e}", "BMAD ERROR")
+            finally:
+                self.call_from_thread(self._ensure_output_root)
+                self.call_from_thread(self._refresh_tree)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    # -------------------- buttons --------------------
     def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id or ""
 
+        # bench
+        if bid == "btn_bench_fast":
+            self._bench_start(program="bench-fast", trials=1, mode="quick", resume=True)
+            return
+        if bid == "btn_bench_resume_std":
+            self._bench_start(program="bench-standard", trials=5, mode="tune", resume=True)
+            return
+        if bid == "btn_bench_standard":
+            self._bench_start(program="bench-standard", trials=5, mode="tune", resume=True)
+            return
+        if bid == "btn_bench_advanced":
+            self._bench_start(program="bench-advanced", trials=5, mode="tune", resume=True)
+            return
+        if bid == "btn_bench_stop":
+            with self._bench_lock:
+                self._bench.stop_requested = True
+            self._log_chat("system", "Stop soft demandé (si supporté par router).")
+            return
+        if bid == "btn_apply_routing":
+            self._apply_routing_best()
+            return
+        if bid == "btn_reload_state":
+            self._bench_reload_last_session()
+            bt = self.query_one("#bench_table", DataTable)
+            bt.clear()
+            bt.add_columns("role", "phase", "model", "score", "latency_ms", "status")
+            self._bench_load_table_history()
+            self._log_chat("system", "Session bench rechargée (state + table + billboard).")
+            return
+        if bid == "btn_save_and_exit":
+            self._save_and_exit()
+            return
+
+        # bmad
+        if bid == "btn_bmad_run":
+            self.call_after_refresh(lambda: asyncio.create_task(self._bmad_prompt_and_run()))
+            return
+
+        # others (chat/settings)
         if bid == "btn_send":
             self.action_send_chat()
         elif bid == "btn_clear":
@@ -572,11 +1156,6 @@ class FreyaTUI(App):
             self._cyber_watch()
         elif bid == "btn_search":
             self._log_chat("system", "Utilise: /search <requête> (gratuit via Wikipedia).")
-        elif bid == "btn_bench_start":
-            self._bench_start()
-        elif bid == "btn_bench_stop":
-            self._bench_running = False
-            self._log_chat("system", "Stop soft demandé.")
         elif bid == "btn_apply_override":
             role = str(self.query_one("#ov_role", Select).value or "")
             model = str(self.query_one("#ov_model", Select).value or "")
@@ -589,10 +1168,6 @@ class FreyaTUI(App):
             self._set_output_dir()
         elif bid == "btn_open_vscode":
             self._run_ps(f'code "{self.output_root}"')
-        elif bid == "btn_sync_bmad":
-            self._run_ps("freya sync-bmad")
-        elif bid == "btn_run_bmad":
-            self._prompt_and_run_bmad()
         elif bid == "btn_refresh_artifacts":
             self._ensure_output_root()
             self._refresh_tree()
@@ -601,9 +1176,10 @@ class FreyaTUI(App):
             self._load_role_prompt(role)
         elif bid == "btn_save_role":
             role = str(self.query_one("#role_select", Select).value or "analyst")
-            self._save_role_prompt(role)
+            self.store.save(f"bmad_roles/{role}.md", self.query_one("#role_prompt", TextArea).text or "")
+            self._log_chat("system", f"Prompt sauvegardé: bmad_roles/{role}.md")
 
-    # -------- actions --------
+    # -------------------- chat actions --------------------
     def action_send_chat(self) -> None:
         text = (self.query_one("#chat_input", TextArea).text or "").strip()
         if not text:
@@ -612,8 +1188,7 @@ class FreyaTUI(App):
         self._log_chat("user", text)
 
         if text.startswith("/search "):
-            q = text[len("/search "):].strip()
-            self._search(q)
+            self._search(text[len("/search ") :].strip())
             return
 
         self._chat_generate(text)
@@ -628,7 +1203,6 @@ class FreyaTUI(App):
         except Exception as e:
             self._log_chat("system", f"Copie KO: {type(e).__name__}: {e}")
 
-    # -------- free search --------
     def _search(self, query: str) -> None:
         self._set_thinking(True)
 
@@ -649,26 +1223,18 @@ class FreyaTUI(App):
 
         threading.Thread(target=worker, daemon=True).start()
 
-    # -------- free cyber watch --------
     def _cyber_watch(self) -> None:
         self._set_thinking(True)
-        self._log_chat("system", "Cyber Watch: CISA KEV (gratuit)…")
+        self._log_chat("system", "Cyber Watch: CISA KEV…")
 
         def worker() -> None:
             try:
                 kev = fetch_json("https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json")
                 vulns = (kev.get("vulnerabilities") or [])[:10]
-                lines = ["### CISA KEV (Top 10) — source officielle", "URL: https://www.cisa.gov/known-exploited-vulnerabilities-catalog", ""]
+                lines = ["### CISA KEV (Top 10)", "URL: https://www.cisa.gov/known-exploited-vulnerabilities-catalog", ""]
                 for v in vulns:
-                    cve = v.get("cveID", "")
-                    vendor = v.get("vendorProject", "")
-                    product = v.get("product", "")
-                    added = v.get("dateAdded", "")
-                    due = v.get("dueDate", "")
-                    lines.append(f"- **{cve}** — {vendor} {product} (added {added}, due {due})")
-                payload = "\n".join(lines)
-                self.call_from_thread(self._log_chat, "tool", payload)
-                self.call_from_thread(self._chat_generate, "Résume ces KEV en FR (défensif): priorités + actions patch/mitigation/détection.")
+                    lines.append(f"- **{v.get('cveID','')}** — {v.get('vendorProject','')} {v.get('product','')}")
+                self.call_from_thread(self._log_chat, "tool", "\n".join(lines))
             except Exception as e:
                 self.call_from_thread(self._log_chat, "system", f"Cyber Watch error: {type(e).__name__}: {e}")
             finally:
@@ -676,7 +1242,6 @@ class FreyaTUI(App):
 
         threading.Thread(target=worker, daemon=True).start()
 
-    # -------- chat generate --------
     def _chat_generate(self, user_text: str) -> None:
         self._set_thinking(True)
 
@@ -689,29 +1254,13 @@ class FreyaTUI(App):
                 system = f"{base}\n\nDate: {today}\nPreset: {hat}\n{hat_txt}\n"
 
                 primary = str(self.query_one("#primary_model", Select).value or self.models[0])
-                summarizer = str(self.query_one("#summarizer_model", Select).value or primary)
-                auto = bool(self.query_one("#best_models", Checkbox).value)
-
-                primary_use = primary
-                if auto and "dolphin-llama3:8b" in self.models:
-                    primary_use = "dolphin-llama3:8b"
-
                 r1 = self.client.generate(
-                    model=primary_use,
+                    model=primary,
                     prompt=user_text,
                     system=system,
                     options_extra={"temperature": 0.2, "top_p": 0.9, "repeat_penalty": 1.05, "num_predict": 900},
                 )
-                answer = (r1.response or "").strip()
-
-                r2 = self.client.generate(
-                    model=summarizer,
-                    prompt=("Résume et structure en FR:\n- TL;DR\n- Actions\n- Risques\n- Next steps\n\n" + answer),
-                    system="Tu es un summarizer FR. Concis et structuré.",
-                    options_extra={"temperature": 0.0, "top_p": 1.0, "repeat_penalty": 1.05, "num_predict": 450},
-                )
-                summary = (r2.response or "").strip()
-                self.call_from_thread(self._log_chat, "assistant", f"{answer}\n\n---\n## Résumé\n{summary}\n\n*(primary={primary_use}, summarizer={summarizer})*")
+                self.call_from_thread(self._log_chat, "assistant", (r1.response or "").strip())
             except Exception as e:
                 self.call_from_thread(self._log_chat, "system", f"Chat error: {type(e).__name__}: {e}")
             finally:
@@ -719,83 +1268,7 @@ class FreyaTUI(App):
 
         threading.Thread(target=worker, daemon=True).start()
 
-    # -------- bench + billboard --------
-    def _bench_start(self) -> None:
-        if self._bench_running:
-            self._log_chat("system", "Bench déjà en cours.")
-            return
-        self._bench_running = True
-
-        bt = self.query_one("#bench_table", DataTable)
-        bt.clear()
-
-        bb = self.query_one("#bb_table", DataTable)
-        bb.clear()
-        bb.add_columns("role", "best_model", "score", "latency_ms", "override")
-
-        phase_lbl = self.query_one("#bench_phase", Static)
-        role_bar = self.query_one("#bench_role_bar", ProgressBar)
-        model_bar = self.query_one("#bench_model_bar", ProgressBar)
-        role_bar.update(total=100, progress=0)
-        model_bar.update(total=100, progress=0)
-
-        def progress(evt: str, payload: dict[str, Any]) -> None:
-            if not self._bench_running:
-                return
-            if evt == "phase_start":
-                self.call_from_thread(phase_lbl.update, f"Phase: {payload.get('phase')}")
-                self.call_from_thread(role_bar.update, total=100, progress=0)
-                self.call_from_thread(model_bar.update, total=100, progress=0)
-            elif evt == "model_start":
-                i = int(payload.get("model_i", 0))
-                n = int(payload.get("total_models", 1)) or 1
-                self.call_from_thread(role_bar.update, total=100, progress=int((i / n) * 100))
-            elif evt == "model_done":
-                row = (
-                    str(payload.get("role", "")),
-                    str(payload.get("phase", "")),
-                    str(payload.get("model", "")),
-                    str(payload.get("score", "")),
-                    str(payload.get("latency_ms", "")),
-                    str(payload.get("status", "")),
-                )
-                self.call_from_thread(bt.add_row, *row)
-
-        def worker() -> None:
-            try:
-                cache_dir = self.cfg.cache_root / "bench_runs" / "bench-standard"
-                cache_dir.mkdir(parents=True, exist_ok=True)
-                scores = self.router.bench(
-                    roles=None,
-                    models=None,
-                    max_models=0,
-                    trials=5,
-                    mode="tune",
-                    cache_dir=cache_dir,
-                    resume=True,
-                    program="bench-standard",
-                    progress=progress,
-                )
-
-                # billboard best per role
-                def fill_billboard() -> None:
-                    for role, lst in scores.items():
-                        if not lst:
-                            continue
-                        best = lst[0]
-                        ov = self._override_by_role.get(role, "")
-                        bb.add_row(role, best.model, str(best.format_score), str(best.latency_ms), ov)
-
-                self.call_from_thread(fill_billboard)
-                self.call_from_thread(self._log_chat, "system", "Bench terminé (billboard mis à jour).")
-            except Exception as e:
-                self.call_from_thread(self._log_chat, "system", f"Bench error: {type(e).__name__}: {e}")
-            finally:
-                self._bench_running = False
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    # -------- BMAD output + run --------
+    # -------------------- misc --------------------
     def _set_output_dir(self) -> None:
         val = str(self.query_one("#out_dir", Input).value or "").strip()
         if not val:
@@ -808,30 +1281,12 @@ class FreyaTUI(App):
         self._refresh_tree()
         self._log_chat("system", f"Output changé: {self.output_root}")
 
-    def _prompt_and_run_bmad(self) -> None:
-        def after(goal: str | None) -> None:
-            if not goal:
-                self._log_chat("system", "BMAD annulé.")
-                return
-            safe = goal.replace("`", "``").replace('"', '""')
-            env = os.environ.copy()
-            env["FREYA_OUTPUT_ROOT"] = str(self.output_root)
-
-            def run() -> None:
-                try:
-                    self.call_from_thread(self._log_chat, "tool", f"BMAD goal: **{goal}**\nOutput: `{self.output_root}`")
-                    subprocess.run(["powershell", "-NoProfile", "-Command", f'freya run --goal "{safe}"'], env=env, timeout=60 * 60)
-                    self.call_from_thread(self._log_chat, "system", "BMAD terminé. Refresh artefacts.")
-                    self.call_from_thread(self._refresh_tree)
-                except Exception as e:
-                    self.call_from_thread(self._log_chat, "system", f"BMAD error: {type(e).__name__}: {e}")
-
-            threading.Thread(target=run, daemon=True).start()
-
-        self.push_screen(GoalPrompt(), after)
-
     def _run_ps(self, cmd: str) -> None:
         try:
             subprocess.run(["powershell", "-NoProfile", "-Command", cmd], timeout=120)
         except Exception:
             pass
+
+
+if __name__ == "__main__":
+    FreyaTUI().run()

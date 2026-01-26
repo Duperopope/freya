@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,7 @@ from rich.table import Table
 
 from .config import FreyaConfig
 from .ollama_client import OllamaClient
-from .router import LLMRouter
+from .router import LLMRouter, ModelScore
 
 console = Console()
 
@@ -29,7 +30,25 @@ def cmd_discover_models(_: argparse.Namespace) -> int:
     return 0
 
 
-def _bench(program: str, mode: str, trials: int, roles: list[str] | None) -> int:
+def _write_routing(cache_root: Path, scores: dict[str, list[ModelScore]]) -> Path:
+    """
+    Persist best-per-role routing to cache_root/routing.json
+    Compatible with Orchestrator.model_for_role/options_for_role.
+    """
+    routing: dict[str, Any] = {}
+    for role, lst in scores.items():
+        if not lst:
+            continue
+        best = lst[0]
+        routing[role] = {"model": best.model, "options": dict(best.options or {})}
+
+    out = cache_root / "routing.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(routing, indent=2, ensure_ascii=False), encoding="utf-8")
+    return out
+
+
+def _bench(program: str, mode: str, trials: int, roles: list[str] | None, apply_routing: bool) -> int:
     cfg = FreyaConfig.load()
     client = OllamaClient(base_url=cfg.ollama.base_url)
     router = LLMRouter(client)
@@ -75,23 +94,27 @@ def _bench(program: str, mode: str, trials: int, roles: list[str] | None) -> int
         summary.add_row(role, best.model, str(best.format_score), str(best.latency_ms))
 
     console.print(summary)
+
+    if apply_routing:
+        p = _write_routing(cfg.cache_root, scores)
+        console.print(f"[green]routing.json mis à jour:[/green] {p}")
+
     return 0
 
 
-def cmd_bench_fast(_: argparse.Namespace) -> int:
-    return _bench("bench-fast", "quick", 1, None)
+def cmd_bench_fast(args: argparse.Namespace) -> int:
+    return _bench("bench-fast", "quick", 1, None, bool(args.apply_routing))
 
 
-def cmd_bench_standard(_: argparse.Namespace) -> int:
-    return _bench("bench-standard", "tune", 5, None)
+def cmd_bench_standard(args: argparse.Namespace) -> int:
+    return _bench("bench-standard", "tune", 5, None, bool(args.apply_routing))
 
 
-def cmd_bench_advanced(_: argparse.Namespace) -> int:
-    return _bench("bench-advanced", "tune", 5, None)
+def cmd_bench_advanced(args: argparse.Namespace) -> int:
+    return _bench("bench-advanced", "tune", 5, None, bool(args.apply_routing))
 
 
 def cmd_autopilot(args: argparse.Namespace) -> int:
-    # IMPORTANT: module is freya.autopilot (not freya.tools.autopilot)
     from .autopilot import AutopilotConfig, FreyaAutopilot
 
     cfg = FreyaConfig.load()
@@ -132,12 +155,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_discover_models)
 
     s = sub.add_parser("bench-fast")
+    s.add_argument("--apply-routing", action="store_true", help="Écrit cache_root/routing.json avec les meilleurs modèles.")
     s.set_defaults(func=cmd_bench_fast)
 
     s = sub.add_parser("bench-standard")
+    s.add_argument("--apply-routing", action="store_true", help="Écrit cache_root/routing.json avec les meilleurs modèles.")
     s.set_defaults(func=cmd_bench_standard)
 
     s = sub.add_parser("bench-advanced")
+    s.add_argument("--apply-routing", action="store_true", help="Écrit cache_root/routing.json avec les meilleurs modèles.")
     s.set_defaults(func=cmd_bench_advanced)
 
     s = sub.add_parser("autopilot")
