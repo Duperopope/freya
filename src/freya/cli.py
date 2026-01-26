@@ -141,9 +141,64 @@ def cmd_autopilot(args: argparse.Namespace) -> int:
 
 
 def cmd_tui(_: argparse.Namespace) -> int:
-    from .tui import FreyaTUI
+    """Launch the legacy TUI (requires textual)."""
+    try:
+        from .tui import FreyaTUI
+        FreyaTUI().run()
+        return 0
+    except ImportError:
+        console.print("[red]Error:[/red] TUI requires 'textual'. Install with: pip install freya[tui]")
+        return 1
 
-    FreyaTUI().run()
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Start the Freya Web API server."""
+    import uvicorn
+    from pathlib import Path
+    
+    host = args.host
+    port = args.port
+    debug = args.debug
+    
+    console.rule("[bold cyan]Freya Web Server v2.0[/bold cyan]")
+    console.print(f"[dim]Host:[/dim] {host}")
+    console.print(f"[dim]Port:[/dim] {port}")
+    console.print(f"[dim]Debug:[/dim] {debug}")
+    
+    # Check for static files (built web UI)
+    web_dist = Path(__file__).parent.parent.parent / "web" / "dist"
+    static_found = web_dist.exists() and (web_dist / "index.html").exists()
+    
+    if static_found:
+        console.print(f"[green]Web UI:[/green] {web_dist}")
+    else:
+        console.print(f"[yellow]Web UI not built.[/yellow] Run: cd web && npm install && npm run build")
+        console.print(f"[dim]API-only mode enabled.[/dim]")
+    
+    console.print()
+    console.print(f"[bold green]Server starting at http://{host}:{port}[/bold green]")
+    if debug:
+        console.print(f"[dim]API docs: http://{host}:{port}/api/docs[/dim]")
+    console.print()
+    
+    # Determine which app factory to use
+    if debug:
+        app_target = "freya.api.main:create_app"
+        factory = True
+    else:
+        # Production mode with static files
+        app_target = "freya.api.main:create_production_app"
+        factory = True
+    
+    # Run uvicorn
+    uvicorn.run(
+        app_target,
+        factory=factory,
+        host=host,
+        port=port,
+        reload=debug,
+        log_level="debug" if debug else "info",
+    )
     return 0
 
 
@@ -174,8 +229,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--no-vscode", action="store_true", help="Ne pas ouvrir VS Code.")
     s.set_defaults(func=cmd_autopilot)
 
-    s = sub.add_parser("tui")
+    s = sub.add_parser("tui", help="Launch legacy TUI (requires textual)")
     s.set_defaults(func=cmd_tui)
+
+    # Web server command
+    s = sub.add_parser("serve", help="Start the Freya Web API server")
+    s.add_argument("--host", default="127.0.0.1", help="Host to bind to (default: 127.0.0.1)")
+    s.add_argument("--port", "-p", type=int, default=8765, help="Port to listen on (default: 8765)")
+    s.add_argument("--debug", "-d", action="store_true", help="Enable debug mode with auto-reload")
+    s.set_defaults(func=cmd_serve)
 
     return p
 

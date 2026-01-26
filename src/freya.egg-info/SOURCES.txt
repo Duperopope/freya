@@ -36,6 +36,17 @@ src/freya/agents/pm.py
 src/freya/agents/po.py
 src/freya/agents/qa.py
 src/freya/agents/sm.py
+src/freya/api/__init__.py
+src/freya/api/main.py
+src/freya/api/websocket.py
+src/freya/api/routes/__init__.py
+src/freya/api/routes/bench.py
+src/freya/api/routes/bmad.py
+src/freya/api/routes/chat.py
+src/freya/api/routes/files.py
+src/freya/api/routes/models.py
+src/freya/api/routes/settings.py
+src/freya/api/routes/watch.py
 src/freya/tools/__init__.py
 src/freya/tools/clipboard.py
 src/freya/tools/redact.py

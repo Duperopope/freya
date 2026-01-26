@@ -1,0 +1,554 @@
+/**
+ * SettingsPage - Configuration & Preferences
+ * 
+ * Comprehensive settings interface for managing Freya configuration,
+ * model routing, prompts, and system preferences.
+ */
+
+import { useState } from 'react'
+import {
+  Settings,
+  Folder,
+  Server,
+  Brain,
+  FileCode,
+  Palette,
+  Save,
+  RefreshCw,
+  ChevronRight,
+  Check,
+  Copy,
+  ExternalLink,
+  Info,
+  Database,
+  Cpu,
+  HardDrive,
+  Network
+} from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { clsx } from 'clsx'
+import * as api from '../../lib/api'
+
+type SettingsTab = 'paths' | 'ollama' | 'routing' | 'prompts' | 'appearance' | 'about'
+
+interface TabDef {
+  id: SettingsTab
+  name: string
+  icon: typeof Settings
+  description: string
+}
+
+const TABS: TabDef[] = [
+  { id: 'paths', name: 'Paths', icon: Folder, description: 'Configure directory paths' },
+  { id: 'ollama', name: 'Ollama', icon: Server, description: 'LLM server connection' },
+  { id: 'routing', name: 'Model Routing', icon: Brain, description: 'Per-role model assignment' },
+  { id: 'prompts', name: 'Prompts', icon: FileCode, description: 'System prompts management' },
+  { id: 'appearance', name: 'Appearance', icon: Palette, description: 'UI preferences' },
+  { id: 'about', name: 'About', icon: Info, description: 'Version and system info' }
+]
+
+export function SettingsPage() {
+  const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState<SettingsTab>('paths')
+  const [copiedPath, setCopiedPath] = useState<string | null>(null)
+  const [selectedPrompt, setSelectedPrompt] = useState<string | null>(null)
+  const [promptContent, setPromptContent] = useState('')
+
+  // Fetch paths
+  const { data: paths } = useQuery({
+    queryKey: ['paths'],
+    queryFn: api.getPaths,
+  })
+
+  // Fetch routing
+  const { data: routing } = useQuery({
+    queryKey: ['routing'],
+    queryFn: api.getRouting,
+  })
+
+  // Fetch models
+  const { data: models } = useQuery({
+    queryKey: ['models'],
+    queryFn: api.getModels,
+  })
+
+  // Fetch prompts
+  const { data: prompts } = useQuery({
+    queryKey: ['prompts'],
+    queryFn: api.getPrompts,
+  })
+
+  // Fetch version
+  const { data: version } = useQuery({
+    queryKey: ['version'],
+    queryFn: api.getVersion,
+  })
+
+  // Fetch health for system info
+  const { data: health } = useQuery({
+    queryKey: ['health'],
+    queryFn: api.getHealth,
+  })
+
+  // Fetch system info
+  const { data: systemInfo } = useQuery({
+    queryKey: ['systemInfo'],
+    queryFn: api.getSystemInfo,
+  })
+
+  // Copy to clipboard
+  const copyToClipboard = async (text: string, key: string) => {
+    await navigator.clipboard.writeText(text)
+    setCopiedPath(key)
+    setTimeout(() => setCopiedPath(null), 2000)
+  }
+
+  // Load prompt content
+  const loadPrompt = async (name: string) => {
+    try {
+      const data = await api.getPrompt(name)
+      setSelectedPrompt(name)
+      setPromptContent(data.content)
+    } catch (e) {
+      setPromptContent('Error loading prompt')
+    }
+  }
+
+  // Save prompt mutation
+  const savePromptMutation = useMutation({
+    mutationFn: () => api.savePrompt(selectedPrompt!, promptContent),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prompts'] })
+    },
+  })
+
+  // Save routing mutation
+  const saveRoutingMutation = useMutation({
+    mutationFn: (configs: api.RoutingConfig[]) => api.setRouting(configs),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['routing'] })
+    },
+  })
+
+  return (
+    <div className="h-full flex overflow-hidden">
+      {/* Sidebar */}
+      <div className="w-64 border-r border-freya-border bg-freya-bg-secondary p-4">
+        <h2 className="text-lg font-semibold text-freya-text-primary mb-4 flex items-center gap-2">
+          <Settings className="w-5 h-5" />
+          Settings
+        </h2>
+
+        <nav className="space-y-1">
+          {TABS.map((tab) => {
+            const Icon = tab.icon
+            const isActive = activeTab === tab.id
+            
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={clsx(
+                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-left',
+                  isActive
+                    ? 'bg-freya-bg-tertiary text-freya-accent-blue border-l-2 border-freya-accent-blue'
+                    : 'text-freya-text-secondary hover:text-freya-text-primary hover:bg-freya-bg-tertiary/50'
+                )}
+              >
+                <Icon className={clsx('w-5 h-5', isActive && 'text-freya-accent-blue')} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium">{tab.name}</div>
+                  <div className="text-xs text-freya-text-muted truncate">{tab.description}</div>
+                </div>
+                {isActive && <ChevronRight className="w-4 h-4" />}
+              </button>
+            )
+          })}
+        </nav>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-3xl mx-auto">
+          {/* Paths Tab */}
+          {activeTab === 'paths' && (
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <h3 className="text-xl font-semibold text-freya-text-primary mb-2">Directory Paths</h3>
+                <p className="text-freya-text-muted">
+                  These paths define where Freya stores its data, artifacts, and cache files.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                {paths && Object.entries(paths).map(([key, value]) => (
+                  <div
+                    key={key}
+                    className="flex items-center justify-between p-4 bg-freya-bg-secondary rounded-lg border border-freya-border"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-freya-text-secondary capitalize">
+                        {key.replace(/_/g, ' ')}
+                      </div>
+                      <div className="font-mono text-sm text-freya-text-primary truncate mt-1">
+                        {value}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard(value, key)}
+                      className="ml-4 p-2 rounded hover:bg-freya-bg-tertiary transition-colors"
+                      title="Copy path"
+                    >
+                      {copiedPath === key ? (
+                        <Check className="w-4 h-4 text-freya-accent-green" />
+                      ) : (
+                        <Copy className="w-4 h-4 text-freya-text-muted" />
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 bg-freya-bg-tertiary rounded-lg border border-freya-border">
+                <div className="flex items-start gap-3">
+                  <Info className="w-5 h-5 text-freya-accent-blue mt-0.5" />
+                  <div className="text-sm text-freya-text-secondary">
+                    <p className="font-medium text-freya-text-primary mb-1">Environment Variables</p>
+                    <p>
+                      These paths can be customized using environment variables like{' '}
+                      <code className="text-freya-accent-cyan">FREYA_MANAGED_ROOT</code>,{' '}
+                      <code className="text-freya-accent-cyan">FREYA_CACHE_ROOT</code>, etc.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Ollama Tab */}
+          {activeTab === 'ollama' && (
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <h3 className="text-xl font-semibold text-freya-text-primary mb-2">Ollama Connection</h3>
+                <p className="text-freya-text-muted">
+                  Configure the connection to your local Ollama server.
+                </p>
+              </div>
+
+              {/* Connection Status */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={clsx(
+                      'w-3 h-3 rounded-full',
+                      health?.ollama?.connected ? 'bg-freya-accent-green animate-pulse' : 'bg-freya-accent-red'
+                    )} />
+                    <span className="font-medium text-freya-text-primary">
+                      {health?.ollama?.connected ? 'Connected' : 'Disconnected'}
+                    </span>
+                  </div>
+                  <span className="text-sm text-freya-text-muted">
+                    {health?.ollama?.models_count ?? 0} models available
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-freya-text-secondary mb-2">Base URL</label>
+                    <div className="input bg-freya-bg-primary flex items-center gap-2">
+                      <Network className="w-4 h-4 text-freya-text-muted" />
+                      <span className="text-freya-text-primary">
+                        {health?.ollama?.base_url || 'http://localhost:11434'}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-freya-text-secondary mb-2">Timeout</label>
+                    <div className="input bg-freya-bg-primary flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4 text-freya-text-muted" />
+                      <span className="text-freya-text-primary">120s</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Models List */}
+              {models && models.length > 0 && (
+                <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                  <h4 className="font-medium text-freya-text-primary mb-3">Installed Models</h4>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {models.map((model) => (
+                      <div
+                        key={model.name}
+                        className="flex items-center justify-between p-3 bg-freya-bg-primary rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Brain className="w-4 h-4 text-freya-accent-purple" />
+                          <span className="font-mono text-sm text-freya-text-primary">
+                            {model.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm">
+                          {model.size_gb && (
+                            <span className="text-freya-text-muted">
+                              {model.size_gb.toFixed(1)} GB
+                            </span>
+                          )}
+                          {model.is_freya_pulled && (
+                            <span className="badge badge-blue">Freya</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Routing Tab */}
+          {activeTab === 'routing' && (
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <h3 className="text-xl font-semibold text-freya-text-primary mb-2">Model Routing</h3>
+                <p className="text-freya-text-muted">
+                  Configure which model to use for each BMAD role.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {['analyst', 'pm', 'architect', 'po', 'sm', 'dev', 'qa'].map((role) => {
+                  const config = routing?.find(r => r.role === role)
+                  
+                  return (
+                    <div
+                      key={role}
+                      className="flex items-center justify-between p-4 bg-freya-bg-secondary rounded-lg border border-freya-border"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-freya-bg-tertiary flex items-center justify-center">
+                          <Brain className="w-5 h-5 text-freya-accent-blue" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-freya-text-primary capitalize">{role}</div>
+                          <div className="text-sm text-freya-text-muted">
+                            {config?.model || 'Not configured'}
+                          </div>
+                        </div>
+                      </div>
+                      <select
+                        value={config?.model || ''}
+                        onChange={(e) => {
+                          const newRouting = [...(routing || [])]
+                          const idx = newRouting.findIndex(r => r.role === role)
+                          if (idx >= 0) {
+                            newRouting[idx] = { ...newRouting[idx], model: e.target.value }
+                          } else {
+                            newRouting.push({ role, model: e.target.value, options: {} })
+                          }
+                          saveRoutingMutation.mutate(newRouting)
+                        }}
+                        className="input w-64"
+                      >
+                        <option value="">Select model...</option>
+                        {models?.map((m) => (
+                          <option key={m.name} value={m.name}>{m.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Prompts Tab */}
+          {activeTab === 'prompts' && (
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <h3 className="text-xl font-semibold text-freya-text-primary mb-2">System Prompts</h3>
+                <p className="text-freya-text-muted">
+                  Manage system prompts used by Freya agents.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Prompts List */}
+                <div className="bg-freya-bg-secondary rounded-lg border border-freya-border p-4">
+                  <h4 className="font-medium text-freya-text-primary mb-3">Available Prompts</h4>
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {prompts?.map((prompt) => (
+                      <button
+                        key={prompt.name}
+                        onClick={() => loadPrompt(prompt.name)}
+                        className={clsx(
+                          'w-full text-left p-3 rounded-lg transition-all',
+                          selectedPrompt === prompt.name
+                            ? 'bg-freya-accent-blue/10 border border-freya-accent-blue/30'
+                            : 'bg-freya-bg-primary border border-transparent hover:border-freya-border'
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <FileCode className="w-4 h-4 text-freya-text-muted" />
+                          <span className="font-mono text-sm text-freya-text-primary">
+                            {prompt.name}
+                          </span>
+                        </div>
+                        {prompt.preview && (
+                          <p className="text-xs text-freya-text-muted mt-1 truncate">
+                            {prompt.preview}
+                          </p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Prompt Editor */}
+                <div className="bg-freya-bg-secondary rounded-lg border border-freya-border p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-medium text-freya-text-primary">
+                      {selectedPrompt || 'Select a prompt'}
+                    </h4>
+                    {selectedPrompt && (
+                      <button
+                        onClick={() => savePromptMutation.mutate()}
+                        disabled={savePromptMutation.isPending}
+                        className="btn-primary text-sm flex items-center gap-2"
+                      >
+                        <Save className="w-4 h-4" />
+                        Save
+                      </button>
+                    )}
+                  </div>
+                  <textarea
+                    value={promptContent}
+                    onChange={(e) => setPromptContent(e.target.value)}
+                    placeholder="Select a prompt to edit..."
+                    className="textarea h-80 font-mono text-sm"
+                    disabled={!selectedPrompt}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Appearance Tab */}
+          {activeTab === 'appearance' && (
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <h3 className="text-xl font-semibold text-freya-text-primary mb-2">Appearance</h3>
+                <p className="text-freya-text-muted">
+                  Customize the visual appearance of Freya.
+                </p>
+              </div>
+
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <h4 className="font-medium text-freya-text-primary mb-4">Theme</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <button className="p-4 rounded-lg border-2 border-freya-accent-blue bg-freya-bg-primary">
+                    <div className="w-full h-20 rounded bg-gradient-to-br from-freya-bg-primary to-freya-bg-tertiary mb-2" />
+                    <span className="text-sm font-medium text-freya-text-primary">Dark (Default)</span>
+                  </button>
+                  <button className="p-4 rounded-lg border border-freya-border bg-freya-bg-primary opacity-50 cursor-not-allowed">
+                    <div className="w-full h-20 rounded bg-gradient-to-br from-gray-100 to-gray-200 mb-2" />
+                    <span className="text-sm font-medium text-freya-text-secondary">Light (Soon)</span>
+                  </button>
+                  <button className="p-4 rounded-lg border border-freya-border bg-freya-bg-primary opacity-50 cursor-not-allowed">
+                    <div className="w-full h-20 rounded bg-gradient-to-br from-purple-900 to-blue-900 mb-2" />
+                    <span className="text-sm font-medium text-freya-text-secondary">Midnight (Soon)</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <h4 className="font-medium text-freya-text-primary mb-4">Font</h4>
+                <select className="input w-full">
+                  <option>Inter (Default)</option>
+                  <option>JetBrains Mono</option>
+                  <option>Fira Code</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* About Tab */}
+          {activeTab === 'about' && (
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <h3 className="text-xl font-semibold text-freya-text-primary mb-2">About Freya</h3>
+                <p className="text-freya-text-muted">
+                  BMAD-aligned multi-agent orchestrator for local LLMs.
+                </p>
+              </div>
+
+              {/* Version Info */}
+              <div className="p-6 bg-freya-bg-secondary rounded-lg border border-freya-border text-center">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-freya-accent-blue to-freya-accent-purple mx-auto mb-4 flex items-center justify-center">
+                  <Cpu className="w-8 h-8 text-white" />
+                </div>
+                <h4 className="text-2xl font-bold text-freya-text-primary mb-1">Freya</h4>
+                <p className="text-freya-text-secondary mb-4">
+                  Version {version?.version || '2.0.0'}
+                </p>
+                <div className="flex items-center justify-center gap-4 text-sm">
+                  <span className="badge badge-blue">API v{version?.api_version || '2.0'}</span>
+                  <span className="badge badge-purple">BMAD Method</span>
+                </div>
+              </div>
+
+              {/* System Info */}
+              {systemInfo && (
+                <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                  <h4 className="font-medium text-freya-text-primary mb-4">System Resources</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-freya-bg-primary rounded-lg">
+                      <div className="flex items-center gap-2 text-freya-text-muted mb-1">
+                        <Cpu className="w-4 h-4" />
+                        <span className="text-sm">CPU</span>
+                      </div>
+                      <div className="text-xl font-bold text-freya-text-primary">
+                        {systemInfo.cpu_percent.toFixed(0)}%
+                      </div>
+                    </div>
+                    <div className="p-3 bg-freya-bg-primary rounded-lg">
+                      <div className="flex items-center gap-2 text-freya-text-muted mb-1">
+                        <Database className="w-4 h-4" />
+                        <span className="text-sm">RAM</span>
+                      </div>
+                      <div className="text-xl font-bold text-freya-text-primary">
+                        {systemInfo.ram_percent.toFixed(0)}%
+                      </div>
+                    </div>
+                    <div className="p-3 bg-freya-bg-primary rounded-lg col-span-2">
+                      <div className="flex items-center gap-2 text-freya-text-muted mb-1">
+                        <HardDrive className="w-4 h-4" />
+                        <span className="text-sm">Disk</span>
+                      </div>
+                      <div className="text-xl font-bold text-freya-text-primary">
+                        {systemInfo.disk_free_gb.toFixed(0)} GB free / {systemInfo.disk_total_gb.toFixed(0)} GB
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Links */}
+              <div className="flex items-center justify-center gap-4 text-sm">
+                <a href="#" className="flex items-center gap-1 text-freya-accent-blue hover:underline">
+                  Documentation <ExternalLink className="w-3 h-3" />
+                </a>
+                <a href="#" className="flex items-center gap-1 text-freya-accent-blue hover:underline">
+                  GitHub <ExternalLink className="w-3 h-3" />
+                </a>
+                <a href="#" className="flex items-center gap-1 text-freya-accent-blue hover:underline">
+                  Report Issue <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

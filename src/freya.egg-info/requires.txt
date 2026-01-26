@@ -1,5 +1,16 @@
 pydantic>=2.7.0
 requests>=2.32.0
 rich>=13.7.0
-textual
 psutil>=6.0.0
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+websockets>=12.0
+
+[dev]
+pytest>=8.0.0
+httpx>=0.26.0
+pytest-asyncio>=0.23.0
+ruff>=0.2.0
+
+[tui]
+textual>=0.47.0

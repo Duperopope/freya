@@ -4,15 +4,29 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "freya"
-version = "1.1.6.1"
-description = "Freya - BMAD-aligned multi-agent orchestrator for local LLMs via Ollama"
+version = "2.0.0"
+description = "Freya - BMAD-aligned multi-agent orchestrator for local LLMs via Ollama and Web UI"
 requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2.7.0",
   "requests>=2.32.0",
   "rich>=13.7.0",
-  "textual",
   "psutil>=6.0.0",
+  # Web API dependencies
+  "fastapi>=0.109.0",
+  "uvicorn[standard]>=0.27.0",
+  "websockets>=12.0",
+]
+
+[project.optional-dependencies]
+# Legacy TUI support (optional)
+tui = ["textual>=0.47.0"]
+# Development dependencies
+dev = [
+  "pytest>=8.0.0",
+  "httpx>=0.26.0",
+  "pytest-asyncio>=0.23.0",
+  "ruff>=0.2.0",
 ]
 
 [project.scripts]
@@ -23,3 +37,11 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501"]

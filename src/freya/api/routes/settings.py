@@ -1,0 +1,330 @@
+# src/freya/api/routes/settings.py
+"""
+Settings API Routes
+
+Endpoints for configuration management:
+- Get/set configuration
+- Manage prompts
+- View paths and directories
+- System preferences
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
+
+router = APIRouter()
+
+
+# -----------------------------------------------------------------------------
+# Request/Response Models
+# -----------------------------------------------------------------------------
+class PathsConfig(BaseModel):
+    """System paths configuration."""
+    managed_root: str
+    cache_root: str
+    artifacts_root: str
+    output_root: str
+    prompts_root: str
+    workspace_root: str
+    routing_path: str
+
+
+class OllamaConfig(BaseModel):
+    """Ollama configuration."""
+    base_url: str
+    timeout_sec: int
+
+
+class ModelsConfig(BaseModel):
+    """Default models per role."""
+    analyst: str
+    pm: str
+    architect: str
+    po: str
+    sm: str
+    dev: str
+    qa: str
+
+
+class PromptInfo(BaseModel):
+    """Prompt file information."""
+    name: str
+    path: str
+    size_bytes: int
+    preview: str | None = None
+
+
+class PromptContent(BaseModel):
+    """Prompt content."""
+    name: str
+    content: str
+
+
+class SavePromptRequest(BaseModel):
+    """Request to save a prompt."""
+    name: str = Field(..., description="Prompt name (e.g., 'analyst', 'chat_base_fr')")
+    content: str = Field(..., description="Prompt content")
+
+
+# -----------------------------------------------------------------------------
+# Default Prompts
+# -----------------------------------------------------------------------------
+DEFAULT_CHAT_BASE_FR = """Tu es Freya, une assistante IA experte en développement logiciel.
+Tu réponds en français, de façon claire, structurée et actionnable.
+
+Cadre:
+- Réponses légales et éthiques uniquement
+- Approche défensive par défaut pour la sécurité
+- Cite tes sources quand tu utilises des informations externes
+- Format Markdown pour la lisibilité
+"""
+
+DEFAULT_ROLE_PROMPTS = {
+    "analyst": "Tu es l'Analyst BMAD. Tu produis project-brief.md selon BMAD. Précis, structuré.",
+    "pm": "Tu es le PM BMAD. Tu produis PRD.md (FR/NFR/epics).",
+    "architect": "Tu es l'Architect BMAD. Tu produis architecture.md (modules, risques, observabilité, sécurité).",
+    "po": "Tu es le Product Owner BMAD. Tu shards en epic-*.md propres.",
+    "sm": "Tu es le Scrum Master BMAD. Tu produis *.story.md détaillés (AC, steps, tests).",
+    "dev": "Tu es le Developer BMAD. Tu codes, tests, respecte les contraintes.",
+    "qa": "Tu es le QA BMAD. Tu valides, matrice de traçabilité, quality gates.",
+}
+
+
+# -----------------------------------------------------------------------------
+# Endpoints
+# -----------------------------------------------------------------------------
+@router.get("/paths", response_model=PathsConfig)
+async def get_paths(request: Request) -> PathsConfig:
+    """Get all configured paths."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.config:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    cfg = state.config
+    return PathsConfig(
+        managed_root=str(cfg.managed_root),
+        cache_root=str(cfg.cache_root),
+        artifacts_root=str(cfg.artifacts_root),
+        output_root=str(cfg.output_root),
+        prompts_root=str(cfg.prompts_root),
+        workspace_root=str(cfg.safety.workspace_root),
+        routing_path=str(cfg.routing_path),
+    )
+
+
+@router.get("/ollama", response_model=OllamaConfig)
+async def get_ollama_config(request: Request) -> OllamaConfig:
+    """Get Ollama configuration."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.config:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    return OllamaConfig(
+        base_url=state.config.ollama.base_url,
+        timeout_sec=state.config.ollama.timeout_sec,
+    )
+
+
+@router.get("/models-default", response_model=ModelsConfig)
+async def get_default_models(request: Request) -> ModelsConfig:
+    """Get default models per role (from config, not routing)."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.config:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    m = state.config.models
+    return ModelsConfig(
+        analyst=m.analyst,
+        pm=m.pm,
+        architect=m.architect,
+        po=m.po,
+        sm=m.sm,
+        dev=m.dev,
+        qa=m.qa,
+    )
+
+
+@router.get("/prompts", response_model=list[PromptInfo])
+async def list_prompts(request: Request) -> list[PromptInfo]:
+    """List all available prompts."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.config:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    prompts_root = state.config.prompts_root
+    _ensure_default_prompts(prompts_root)
+    
+    prompts = []
+    
+    # Root level prompts
+    for path in prompts_root.glob("*.md"):
+        try:
+            content = path.read_text(encoding="utf-8")
+            prompts.append(PromptInfo(
+                name=path.stem,
+                path=str(path.relative_to(prompts_root)),
+                size_bytes=len(content.encode("utf-8")),
+                preview=content[:200] + "..." if len(content) > 200 else content
+            ))
+        except Exception:
+            continue
+    
+    # BMAD role prompts
+    bmad_dir = prompts_root / "bmad_roles"
+    if bmad_dir.exists():
+        for path in bmad_dir.glob("*.md"):
+            try:
+                content = path.read_text(encoding="utf-8")
+                prompts.append(PromptInfo(
+                    name=f"bmad/{path.stem}",
+                    path=str(path.relative_to(prompts_root)),
+                    size_bytes=len(content.encode("utf-8")),
+                    preview=content[:200] + "..." if len(content) > 200 else content
+                ))
+            except Exception:
+                continue
+    
+    return sorted(prompts, key=lambda x: x.name)
+
+
+@router.get("/prompts/{name:path}", response_model=PromptContent)
+async def get_prompt(request: Request, name: str) -> PromptContent:
+    """Get a specific prompt content."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.config:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    prompts_root = state.config.prompts_root
+    _ensure_default_prompts(prompts_root)
+    
+    # Handle bmad/ prefix
+    if name.startswith("bmad/"):
+        path = prompts_root / "bmad_roles" / f"{name[5:]}.md"
+    else:
+        path = prompts_root / f"{name}.md"
+    
+    # Security check
+    try:
+        path = path.resolve()
+        if prompts_root.resolve() not in path.parents and path != prompts_root.resolve():
+            raise HTTPException(status_code=403, detail="Access denied")
+    except Exception:
+        raise HTTPException(status_code=403, detail="Invalid path")
+    
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    
+    try:
+        content = path.read_text(encoding="utf-8")
+        return PromptContent(name=name, content=content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read prompt: {e}")
+
+
+@router.post("/prompts")
+async def save_prompt(request: Request, body: SavePromptRequest) -> dict[str, Any]:
+    """Save a prompt."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.config:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    prompts_root = state.config.prompts_root
+    
+    # Handle bmad/ prefix
+    if body.name.startswith("bmad/"):
+        path = prompts_root / "bmad_roles" / f"{body.name[5:]}.md"
+    else:
+        path = prompts_root / f"{body.name}.md"
+    
+    # Security check
+    try:
+        path = path.resolve()
+        if prompts_root.resolve() not in path.parents and path.parent != prompts_root.resolve():
+            raise HTTPException(status_code=403, detail="Access denied")
+    except Exception:
+        raise HTTPException(status_code=403, detail="Invalid path")
+    
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body.content, encoding="utf-8")
+        return {
+            "saved": True,
+            "name": body.name,
+            "path": str(path),
+            "size_bytes": len(body.content.encode("utf-8"))
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save prompt: {e}")
+
+
+@router.get("/env")
+async def get_env_vars() -> dict[str, str | None]:
+    """Get Freya-related environment variables (values redacted for security)."""
+    freya_vars = {}
+    for key, value in os.environ.items():
+        if key.startswith("FREYA_"):
+            # Redact sensitive values
+            if any(s in key.upper() for s in ["KEY", "TOKEN", "SECRET", "PASSWORD"]):
+                freya_vars[key] = "[REDACTED]"
+            else:
+                freya_vars[key] = value
+    return freya_vars
+
+
+@router.get("/version")
+async def get_version() -> dict[str, str]:
+    """Get Freya version information."""
+    return {
+        "version": "2.0.0",
+        "api_version": "2.0",
+        "python_version": f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}",
+    }
+
+
+@router.post("/sync-bmad")
+async def sync_bmad(request: Request) -> dict[str, Any]:
+    """Sync BMAD method from GitHub."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.orchestrator:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    try:
+        result = state.orchestrator.sync_bmad()
+        return {"success": True, "message": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"BMAD sync failed: {e}")
+
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+def _ensure_default_prompts(prompts_root: Path) -> None:
+    """Ensure default prompts exist."""
+    prompts_root.mkdir(parents=True, exist_ok=True)
+    bmad_dir = prompts_root / "bmad_roles"
+    bmad_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Chat base prompt
+    chat_path = prompts_root / "chat_base_fr.md"
+    if not chat_path.exists():
+        chat_path.write_text(DEFAULT_CHAT_BASE_FR, encoding="utf-8")
+    
+    # Role prompts
+    for role, content in DEFAULT_ROLE_PROMPTS.items():
+        role_path = bmad_dir / f"{role}.md"
+        if not role_path.exists():
+            role_path.write_text(content + "\n", encoding="utf-8")
