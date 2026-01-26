@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,7 +24,7 @@ from ..ollama_client import OllamaClient
 from ..router import LLMRouter
 from ..orchestrator import Orchestrator
 
-from .websocket import WebSocketManager
+from .websocket import WebSocketManager, websocket_endpoint
 from .routes import chat, bench, bmad, models, files, watch, settings
 
 # -----------------------------------------------------------------------------
@@ -201,7 +201,17 @@ def create_app(
     app.include_router(watch.router, prefix="/api/watch", tags=["Watch"])
     app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
     
-    # Serve static files (built web UI) if provided
+    # WebSocket endpoint (MUST be before static files mount)
+    @app.websocket("/ws")
+    async def ws_endpoint(websocket: WebSocket):
+        """WebSocket endpoint for real-time updates."""
+        state: AppState = app.state.freya
+        if state.ws_manager:
+            await websocket_endpoint(websocket, state.ws_manager)
+        else:
+            await websocket.close(code=1011, reason="WebSocket manager not initialized")
+    
+    # Serve static files (built web UI) if provided - MUST be last
     if static_dir and static_dir.exists():
         app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
     
