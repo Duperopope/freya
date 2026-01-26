@@ -213,7 +213,18 @@ def create_app(
     
     # Serve static files (built web UI) if provided - MUST be last
     if static_dir and static_dir.exists():
-        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+        # Serve static assets
+        app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="assets")
+        
+        # Fallback route for SPA - serve index.html for all non-API routes
+        @app.get("/{full_path:path}")
+        async def serve_spa(full_path: str):
+            """Serve the SPA index.html for client-side routing."""
+            from fastapi.responses import FileResponse
+            index_path = static_dir / "index.html"
+            if index_path.exists():
+                return FileResponse(index_path, media_type="text/html")
+            return JSONResponse(status_code=404, content={"error": "Not found"})
     
     return app
 
