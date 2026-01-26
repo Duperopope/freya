@@ -291,3 +291,115 @@ async def web_search_get(
 ) -> list[SearchResult]:
     """GET endpoint for web search (convenience)."""
     return await web_search(request, SearchRequest(query=query, count=count, provider=provider))
+
+
+# -----------------------------------------------------------------------------
+# Cyber Intelligence Integration
+# -----------------------------------------------------------------------------
+class CyberQueryRequest(BaseModel):
+    """Request to query cyber intelligence data."""
+    query: str = Field(..., description="Question about cybersecurity")
+    include_cves: bool = Field(default=True, description="Include recent CVEs in context")
+    include_alerts: bool = Field(default=True, description="Include security alerts")
+    max_results: int = Field(default=10, ge=1, le=50)
+
+
+@router.post("/cyber-query")
+async def cyber_query(request: Request, body: CyberQueryRequest) -> ChatResponse:
+    """
+    Answer questions about cybersecurity using Watch feed data.
+    
+    This endpoint fetches recent security intelligence and uses it to
+    contextualize the LLM's response about cyber threats.
+    """
+    state = request.app.state.freya
+    
+    if not state.ready or not state.ollama:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    # Select model
+    models = state.router.list_models()
+    if not models:
+        raise HTTPException(status_code=503, detail="No models available")
+    
+    model = None
+    for preferred in ["llama3.1:8b", "mistral:7b", "qwen2.5:7b"]:
+        if preferred in models:
+            model = preferred
+            break
+    if not model:
+        model = models[0]
+    
+    # Build cyber context from Watch data
+    cyber_context = "### Intelligence Cyber Récente:\n\n"
+    
+    try:
+        from ...tools.webwatch import cyber_watch
+        
+        cache_dir = state.config.cache_root / "watch"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Get cyber feed
+        items = cyber_watch(cache_dir)[:body.max_results]
+        
+        if items:
+            for item in items:
+                severity_badge = ""
+                if hasattr(item, 'severity') and item.severity:
+                    severity_badge = f"[{item.severity.upper()}] "
+                
+                cyber_context += f"- **{severity_badge}{item.title}**\n"
+                cyber_context += f"  Source: {item.source}"
+                if item.cve:
+                    cyber_context += f" | CVE: {item.cve}"
+                cyber_context += f" | Date: {item.published}\n"
+                cyber_context += f"  URL: {item.url}\n\n"
+        else:
+            cyber_context += "Aucune donnée récente disponible.\n"
+            
+    except Exception as e:
+        cyber_context += f"Erreur lors de la récupération des données: {str(e)}\n"
+    
+    # Build system prompt for cyber analyst
+    system = """Tu es un analyste cyber threat intelligence expert.
+Tu réponds en français avec des informations précises et actionnables.
+
+Tu as accès aux dernières alertes de sécurité et CVEs. Utilise ces données pour:
+1. Répondre aux questions sur les menaces actuelles
+2. Identifier les vulnérabilités pertinentes
+3. Recommander des actions de mitigation
+4. Contextualiser les risques pour l'utilisateur
+
+Format Markdown pour la lisibilité. Cite tes sources (CVE, CISA, CERT-FR, etc.)."""
+    
+    # Add date context
+    today = dt.date.today().isoformat()
+    system = f"{system}\n\nDate: {today}"
+    
+    # Combine query with cyber context
+    user_message = f"{body.query}\n\n{cyber_context}"
+    
+    # Generate response
+    try:
+        result = state.ollama.generate(
+            model=model,
+            prompt=user_message,
+            system=system,
+            options_extra={
+                "temperature": 0.3,
+                "num_predict": 2048,
+                "top_p": 0.9,
+            }
+        )
+        
+        content = redact_secrets(result.response.strip())
+        
+        return ChatResponse(
+            content=content,
+            model=model,
+            duration_ms=result.duration_ms,
+            tokens_estimated=len(content.split()) * 2,
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Generation failed: {e}")

@@ -468,3 +468,22 @@ export async function getVersion(): Promise<{ version: string; api_version: stri
   const res = await fetch(`${API_BASE}/settings/version`)
   return handleResponse(res)
 }
+
+// -----------------------------------------------------------------------------
+// Cyber Intelligence Query
+// -----------------------------------------------------------------------------
+export interface CyberQueryRequest {
+  query: string
+  include_cves?: boolean
+  include_alerts?: boolean
+  max_results?: number
+}
+
+export async function cyberQuery(request: CyberQueryRequest): Promise<ChatResponse> {
+  const res = await fetch(`${API_BASE}/chat/cyber-query`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  return handleResponse(res)
+}
