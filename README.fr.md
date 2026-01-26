@@ -78,6 +78,7 @@ freya2/
 - **Tools** : Utilitaires pour interagir avec le système et le web
 - **LLM Clients** : Interfaces pour Ollama et Llama.cpp
 - **TUI** : Interface utilisateur moderne avec Textual
+- **CLI** : Interface ligne de commande pour l'automatisation et les scripts
 
 ### Architecture logique
 
@@ -87,7 +88,7 @@ freya2/
                     ┌─────────────────┐
                     │   Utilisateur   │
                     │   Interface     │
-                    │     (TUI)       │
+                    │   (TUI/CLI)     │
                     └─────────┬───────┘
                               │
                               ▼
@@ -152,7 +153,7 @@ freya2/
 - **Orchestrator ↔ BMAD Sync** : Gestion du workflow de développement
 - **Router ↔ BenchmarkQ** : Optimisation des performances LLM
 - **Agents ↔ Outils** : Exécution des tâches opérationnelles
-- **TUI ↔ Tous les composants** : Interface et visualisation unifiées
+- **Interface (TUI/CLI) ↔ Tous les composants** : Interface et visualisation unifiées
 - **Gestion système** : Infrastructure et monitoring partagés
 
 #### Architecture en couches
@@ -160,7 +161,7 @@ freya2/
 ```
 ┌─────────────────────────────────────┐
 │         Interface utilisateur       │
-│               (TUI)                 │
+│             (TUI/CLI)               │
 ├─────────────────────────────────────┤
 │         Coordination                │
 │        (Orchestrator)               │
