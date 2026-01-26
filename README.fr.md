@@ -43,6 +43,7 @@ freya2/
         ├── orchestrator.py      # Coordination des agents
         ├── router.py            # Routage intelligent LLM
         ├── tui.py               # Interface utilisateur textuelle
+        ├── tui.tcss             # Styles TUI
         ├── benchmarkq.py        # Suite de benchmarking
         ├── bmad_sync.py         # Synchronisation BMAD
         ├── console.py           # Utilitaires console
@@ -56,6 +57,8 @@ freya2/
         ├── openai_compat_client.py # Compatibilité OpenAI
         ├── powershell.py        # Intégration PowerShell
         ├── quality.py           # Portes de qualité
+        ├── autopilot.py         # Fonctionnalité Autopilot
+        ├── prompts_store.py     # Stockage des prompts
         ├── agents/              # Agents spécialisés
         │   ├── __init__.py
         │   ├── analyst.py       # Agent d'analyse
@@ -68,14 +71,17 @@ freya2/
         │   └── sm.py            # Agent Scrum Master
         └── tools/               # Outils intégrés
             ├── __init__.py
-            ├── shell.py         # Outil Shell
-            └── webwatch.py      # Outil de surveillance web
+            ├── clipboard.py      # Opérations presse-papiers
+            ├── redact.py         # Caviardage de contenu
+            ├── shell.py          # Outil Shell
+            ├── websearch.py      # Fonctionnalité de recherche web
+            └── webwatch.py       # Outil de surveillance web
 ```
 
 - **Orchestrator** : Noyau du système, coordonne les agents selon le workflow BMAD
 - **Router** : Gère le routage des requêtes vers les LLMs appropriés basés sur les benchmarks
 - **Agents** : Classes spécialisées pour chaque rôle du workflow de développement
-- **Tools** : Utilitaires pour interagir avec le système et le web
+- **Tools** : Utilitaires pour les opérations shell, surveillance web, gestion presse-papiers, caviardage de contenu et recherche web
 - **LLM Clients** : Interfaces pour Ollama et Llama.cpp
 - **TUI** : Interface utilisateur moderne avec Textual
 - **CLI** : Interface ligne de commande pour l'automatisation et les scripts
@@ -324,7 +330,7 @@ Orchestrator / Autopilot
    |         |
    |         +--> Ollama / llama.cpp
    |
-   +--> Outils (shell / surveillance web / fs / ide)
+   +--> Outils (shell / surveillance web / recherche web / presse-papiers / fs / ide)
    |
    +--> Artefacts + Logs (JSONL) + État (reprendre)
 ```

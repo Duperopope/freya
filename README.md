@@ -43,6 +43,7 @@ freya2/
         ├── orchestrator.py      # Agent coordination
         ├── router.py            # Intelligent LLM routing
         ├── tui.py               # Text user interface
+        ├── tui.tcss             # TUI styles
         ├── benchmarkq.py        # Benchmarking suite
         ├── bmad_sync.py         # BMAD synchronization
         ├── console.py           # Console utilities
@@ -56,6 +57,8 @@ freya2/
         ├── openai_compat_client.py # OpenAI compatibility
         ├── powershell.py        # PowerShell integration
         ├── quality.py           # Quality gates
+        ├── autopilot.py         # Autopilot functionality
+        ├── prompts_store.py     # Prompts storage
         ├── agents/              # Specialized agents
         │   ├── __init__.py
         │   ├── analyst.py       # Analysis agent
@@ -68,14 +71,17 @@ freya2/
         │   └── sm.py            # Scrum Master agent
         └── tools/               # Integrated tools
             ├── __init__.py
-            ├── shell.py         # Shell tool
-            └── webwatch.py      # Web monitoring tool
+            ├── clipboard.py      # Clipboard operations
+            ├── redact.py         # Content redaction
+            ├── shell.py          # Shell tool
+            ├── websearch.py      # Web search functionality
+            └── webwatch.py       # Web monitoring tool
 ```
 
 - **Orchestrator** : System core, coordinates agents according to BMAD workflow
 - **Router** : Manages request routing to appropriate LLMs based on benchmarks
 - **Agents** : Specialized classes for each development workflow role
-- **Tools** : Utilities to interact with system and web
+- **Tools** : Utilities for shell operations, web monitoring, clipboard management, content redaction, and web search
 - **LLM Clients** : Interfaces for Ollama and Llama.cpp
 - **TUI** : Modern user interface with Textual
 - **CLI** : Command line interface for automation and scripting
@@ -324,7 +330,7 @@ Orchestrator / Autopilot
    |         |
    |         +--> Ollama / llama.cpp
    |
-   +--> Tools (shell / web watch / fs / ide)
+   +--> Tools (shell / web watch / web search / clipboard / fs / ide)
    |
    +--> Artifacts + Logs (JSONL) + State (resume)
 ```
