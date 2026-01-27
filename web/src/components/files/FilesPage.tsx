@@ -258,14 +258,19 @@ export function FilesPage() {
 
   // Navigate up
   const navigateUp = () => {
+    // First check if parent is explicitly provided
     if (listing?.parent !== undefined && listing?.parent !== null) {
       setCurrentPath(listing.parent)
     } else if (currentPath) {
       // Fallback: compute parent from current path
-      const parts = currentPath.split('/').filter(Boolean)
+      const parts = currentPath.split(/[/\\]/).filter(Boolean)
       parts.pop()
       setCurrentPath(parts.join('/'))
     }
+    // Reset file selection when navigating up
+    setSelectedFile(null)
+    setFileContent('')
+    setOriginalContent('')
   }
 
   // Navigate to root
