@@ -92,6 +92,28 @@ Include:
         stories_dir = ctx.artifacts_root / "stories"
         story_files = sorted(stories_dir.glob("*.story.md"))
         
+        # Fallback: check for any .md files in stories dir
+        if not story_files:
+            story_files = sorted(stories_dir.glob("*.md"))
+        
+        # Fallback 2: use stories.md from artifacts root
+        if not story_files:
+            stories_md = ctx.artifacts_root / "stories.md"
+            if stories_md.exists() and stories_md.stat().st_size > 50:
+                logger.info(f"[Dev] Using stories.md as fallback: {stories_md}")
+                story_files = [stories_md]
+        
+        # Fallback 3: use PRD.md or architecture.md to generate code directly
+        if not story_files:
+            prd_file = ctx.artifacts_root / "PRD.md"
+            arch_file = ctx.artifacts_root / "architecture.md"
+            if prd_file.exists():
+                logger.info(f"[Dev] Using PRD.md as source (no stories available)")
+                story_files = [prd_file]
+            elif arch_file.exists():
+                logger.info(f"[Dev] Using architecture.md as source (no stories available)")
+                story_files = [arch_file]
+        
         if not story_files:
             # Check if stories directory exists and what's in it
             if not stories_dir.exists():

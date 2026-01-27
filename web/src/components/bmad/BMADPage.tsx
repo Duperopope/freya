@@ -163,19 +163,8 @@ const AGENTS: AgentDef[] = [
     icon: Rocket,
     color: 'text-freya-accent-cyan',
     bgColor: 'bg-freya-accent-cyan/20',
-    output: 'run-report.md',
-    description: 'Launches and tests the application',
-    questions: []
-  },
-  {
-    id: 'validator',
-    name: 'Validator',
-    role: 'validator',
-    icon: CheckCircle2,
-    color: 'text-freya-accent-green',
-    bgColor: 'bg-freya-accent-green/20',
-    output: 'validation.md',
-    description: 'Final validation loop (Dev→QA)',
+    output: 'runner-report.md',
+    description: 'Launches, tests and validates the application',
     questions: []
   }
 ]
