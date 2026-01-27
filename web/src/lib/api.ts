@@ -266,6 +266,13 @@ export async function runBMAD(goal: string, projectName = 'FreyaProject'): Promi
   return handleResponse(res)
 }
 
+export async function stopBMAD(): Promise<{ stopped: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/bmad/stop`, {
+    method: 'POST',
+  })
+  return handleResponse(res)
+}
+
 export interface ResumeInfo {
   project_name: string
   goal: string

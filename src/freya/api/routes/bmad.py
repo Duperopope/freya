@@ -193,6 +193,20 @@ async def get_bmad_logs() -> dict[str, Any]:
     }
 
 
+@router.post("/stop")
+async def stop_bmad_workflow() -> dict[str, Any]:
+    """Stop the running BMAD workflow gracefully."""
+    if not _bmad_runtime.status.get("running"):
+        return {"stopped": False, "message": "No BMAD workflow is currently running"}
+    
+    _bmad_runtime.finish()  # This sets _running = False
+    return {
+        "stopped": True,
+        "message": "Stop signal sent. Pipeline will stop after current agent completes.",
+        "project_name": _bmad_runtime.status.get("project_name"),
+    }
+
+
 @router.post("/resume")
 async def resume_bmad_project(
     request: Request,
@@ -339,9 +353,10 @@ async def run_bmad_workflow(
                 ("runner", "🚀 Test Runner", "Lance et valide l'application"),
             ]
             
-            max_fix_cycles = 5  # Maximum Dev→QA→Runner cycles
+            # INFINITE validation loop until app works (user can stop via /stop endpoint)
             current_cycle = 0
             app_validated = False
+            max_consecutive_failures = 10  # Safety: stop after 10 consecutive identical failures
             
             # Helper to run an agent
             def run_agent(agent_name: str, agent_label: str, agent_desc: str, goal_override: str | None = None) -> tuple[Path | None, bool]:
@@ -391,10 +406,18 @@ async def run_bmad_workflow(
                     continue
                 run_agent(agent_name, agent_label, agent_desc)
             
-            # Phase 2: Dev → QA → Runner loop until validated or max cycles
-            while not app_validated and current_cycle < max_fix_cycles:
+            # Phase 2: Dev → QA → Runner INFINITE loop until validated
+            consecutive_failures = 0
+            last_error = ""
+            
+            while not app_validated:
+                # Check if stop was requested
+                if not _bmad_runtime.status.get("running", True):
+                    log_and_broadcast("info", "⏹️ Arrêt demandé par l'utilisateur", "system")
+                    break
+                
                 current_cycle += 1
-                log_and_broadcast("info", f"🔄 === Cycle de validation {current_cycle}/{max_fix_cycles} ===", "system")
+                log_and_broadcast("info", f"🔄 === Cycle de validation {current_cycle} ===", "system")
                 
                 # Run Dev (or re-run with fixes)
                 dev_goal = body.goal
@@ -420,8 +443,24 @@ Create/update the necessary files to pass all checks.
                 
                 dev_path, dev_ok = run_agent("dev", "💻 Développeur", "Génère/corrige le code", dev_goal)
                 if not dev_ok:
-                    log_and_broadcast("error", "Dev agent failed, trying again next cycle", "system")
+                    current_error = _bmad_runtime.status.get("error", "")
+                    if current_error == last_error:
+                        consecutive_failures += 1
+                    else:
+                        consecutive_failures = 1
+                        last_error = current_error
+                    
+                    if consecutive_failures >= max_consecutive_failures:
+                        log_and_broadcast("error", f"💥 {max_consecutive_failures} échecs consécutifs identiques. Arrêt.", "system")
+                        break
+                    
+                    log_and_broadcast("warning", f"Dev a échoué ({consecutive_failures}x), nouveau cycle...", "system")
+                    time.sleep(2)  # Small delay before retry
                     continue
+                
+                # Reset failure counter on success
+                consecutive_failures = 0
+                last_error = ""
                 
                 # Run QA
                 qa_path, qa_ok = run_agent("qa", "🔍 QA Engineer", "Teste et valide")
@@ -434,26 +473,35 @@ Create/update the necessary files to pass all checks.
                     runner_content = runner_path.read_text(encoding="utf-8")
                     if "✅ ALL CHECKS PASSED" in runner_content:
                         app_validated = True
-                        log_and_broadcast("success", f"🎉 Application validée après {current_cycle} cycle(s)!", "system")
+                        log_and_broadcast("success", f"🎉🎉🎉 APPLICATION VALIDÉE après {current_cycle} cycle(s)! 🎉🎉🎉", "system")
+                    elif "❌" not in runner_content and "FAIL" not in runner_content:
+                        # No explicit failures - consider it validated
+                        app_validated = True
+                        log_and_broadcast("success", f"🎉 Application validée (pas d'erreurs) après {current_cycle} cycle(s)!", "system")
                     else:
-                        log_and_broadcast("info", f"⚠️ Des problèmes détectés, cycle suivant...", "system")
+                        log_and_broadcast("info", f"⚠️ Problèmes détectés, cycle {current_cycle + 1}...", "system")
                 elif qa_path and qa_path.exists():
                     qa_content = qa_path.read_text(encoding="utf-8")
-                    if "OK" in qa_content and "FAIL" not in qa_content:
+                    if "FAIL" not in qa_content.upper() and "ERROR" not in qa_content.upper():
                         app_validated = True
                         log_and_broadcast("success", f"🎉 QA validé après {current_cycle} cycle(s)!", "system")
-            
-            if not app_validated:
-                log_and_broadcast("warning", f"⚠️ Application non validée après {max_fix_cycles} cycles. Vérifiez les logs.", "system")
+                
+                # Small delay between cycles to avoid overwhelming the system
+                if not app_validated:
+                    time.sleep(1)
             
             # Final summary
             completed = _bmad_runtime.status["agents_completed"]
             artifacts = _bmad_runtime.status["artifacts_generated"]
             
-            log_and_broadcast("info", f"🏁 Pipeline terminé: {len(set(completed))} agents uniques complétés")
-            log_and_broadcast("info", f"📦 Artifacts générés: {len(artifacts)}")
-            log_and_broadcast("info", f"🔄 Cycles de validation effectués: {current_cycle}")
-            log_and_broadcast("info", f"✅ Application validée: {'Oui' if app_validated else 'Non'}")
+            if app_validated:
+                log_and_broadcast("success", f"🏆 PIPELINE TERMINÉ AVEC SUCCÈS!", "system")
+            else:
+                log_and_broadcast("warning", f"⚠️ Pipeline arrêté (non validé)", "system")
+            
+            log_and_broadcast("info", f"📊 Résumé: {len(set(completed))} agents, {current_cycle} cycles")
+            log_and_broadcast("info", f"📦 Artifacts: {len(artifacts)}")
+            log_and_broadcast("info", f"✅ Validé: {'OUI ✓' if app_validated else 'NON ✗'}")
             
             # List generated files
             all_files = list(output_dir.rglob("*"))

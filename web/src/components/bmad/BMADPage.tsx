@@ -390,6 +390,22 @@ export function BMADPage() {
     },
   })
   
+  // Stop BMAD mutation
+  const stopMutation = useMutation({
+    mutationFn: () => api.stopBMAD(),
+    onSuccess: (data) => {
+      if (data.stopped) {
+        setAgentLogs(prev => [...prev, {
+          agent: 'system',
+          event: 'info',
+          message: '⏹️ Arrêt demandé...',
+          timestamp: new Date(),
+        }])
+      }
+      refetchStatus()
+    },
+  })
+  
   // Save current project to recent projects
   const saveToRecentProjects = () => {
     const project = { name: projectName, lastModified: new Date().toISOString(), goal: goal.slice(0, 100) }
@@ -754,11 +770,12 @@ Répondez à ces questions ou posez-moi les vôtres !`,
             </div>
           ) : isRunning ? (
             <button
-              onClick={() => {/* TODO: stopMutation.mutate() */}}
+              onClick={() => stopMutation.mutate()}
+              disabled={stopMutation.isPending}
               className="btn-danger flex items-center gap-2"
             >
               <Square className="w-4 h-4" />
-              Stop
+              {stopMutation.isPending ? 'Arrêt...' : 'Stop Pipeline'}
             </button>
           ) : (
             <button
