@@ -241,7 +241,9 @@ async def write_file(request: Request, body: WriteRequest) -> dict[str, Any]:
 async def delete_file(request: Request, path: str, recursive: bool = False) -> dict[str, Any]:
     """Delete a file or directory (with optional recursive deletion)."""
     import shutil
+    import logging
     
+    logger = logging.getLogger("freya.api.files")
     state = request.app.state.freya
     
     if not state.ready:
@@ -258,26 +260,51 @@ async def delete_file(request: Request, path: str, recursive: bool = False) -> d
     if file_path.name in protected_names:
         raise HTTPException(status_code=403, detail=f"Cannot delete protected directory: {file_path.name}")
     
+    # Prevent deleting the root output directory
+    if file_path == base:
+        raise HTTPException(status_code=403, detail="Cannot delete the root output directory")
+    
     try:
-        if file_path.is_dir():
+        was_dir = file_path.is_dir()
+        abs_path = str(file_path.absolute())
+        
+        logger.info(f"Delete request: path={path}, file_path={abs_path}, is_dir={was_dir}, recursive={recursive}")
+        
+        if was_dir:
             if recursive:
-                shutil.rmtree(file_path)
+                logger.info(f"Deleting directory recursively: {abs_path}")
+                # Use shutil.rmtree to delete the directory and all its contents
+                shutil.rmtree(file_path, ignore_errors=False)
+                logger.info(f"rmtree completed for {abs_path}")
             else:
                 # Try to remove empty directory
                 try:
                     file_path.rmdir()
-                except OSError:
+                    logger.info(f"Removed empty directory: {abs_path}")
+                except OSError as e:
+                    logger.warning(f"Directory not empty: {abs_path}, error: {e}")
                     raise HTTPException(
                         status_code=400, 
                         detail="Directory is not empty. Use recursive=true to delete with contents."
                     )
         else:
             file_path.unlink()
+            logger.info(f"Deleted file: {abs_path}")
         
-        return {"deleted": True, "path": path, "was_directory": file_path.is_dir() if file_path.exists() else False}
+        # Verify deletion
+        if file_path.exists():
+            logger.error(f"Delete verification failed: {abs_path} still exists")
+            raise HTTPException(status_code=500, detail=f"Delete failed: path still exists after deletion")
+        
+        logger.info(f"Delete successful: path={path}, was_directory={was_dir}")
+        return {"deleted": True, "path": path, "was_directory": was_dir}
     except HTTPException:
         raise
+    except PermissionError as e:
+        logger.error(f"Permission denied when deleting {abs_path}: {e}")
+        raise HTTPException(status_code=403, detail=f"Permission denied: {e}")
     except Exception as e:
+        logger.error(f"Failed to delete {path}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to delete: {e}")
 
 

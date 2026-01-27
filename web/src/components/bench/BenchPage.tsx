@@ -181,10 +181,20 @@ export function BenchPage() {
   })
 
   // Fetch history
-  const { data: history } = useQuery({
+  const { data: history, isLoading: historyLoading, error: historyError } = useQuery({
     queryKey: ['benchHistory', selectedProgram],
     queryFn: () => api.getBenchHistory(selectedProgram, 100),
   })
+  
+  // Debug: log history state
+  useEffect(() => {
+    console.log('[Bench] History data:', { 
+      program: selectedProgram,
+      historyLength: history?.length || 0,
+      historyLoading,
+      historyError: historyError?.message
+    })
+  }, [history, selectedProgram, historyLoading, historyError])
 
   // Fetch models for manual selection
   const { data: models } = useQuery({

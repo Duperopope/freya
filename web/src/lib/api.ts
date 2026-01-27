@@ -271,6 +271,48 @@ export async function getArtifact(path: string): Promise<{ name: string; path: s
   return handleResponse(res)
 }
 
+// Autonomy Mode v2.4
+export interface AutonomyModeRequest {
+  goal: string
+  project_name?: string
+  analyst_brief: string
+  max_retries?: number
+  max_qa_cycles?: number
+  enable_safeguards?: boolean
+  notification_email?: string | null
+}
+
+export interface AutonomyStatus {
+  running: boolean
+  phase: string
+  current_agent: string | null
+  agents_completed: string[]
+  qa_cycles: number
+  artifacts_generated: string[]
+  errors: { agent: string; error: string; retry: number; timestamp: string }[]
+  started_at: string | null
+  estimated_completion: string | null
+}
+
+export async function getAutonomyStatus(): Promise<AutonomyStatus> {
+  const res = await fetch(`${API_BASE}/bmad/autonomy/status`)
+  return handleResponse(res)
+}
+
+export async function startAutonomyMode(request: AutonomyModeRequest): Promise<{ started: boolean; output_dir: string }> {
+  const res = await fetch(`${API_BASE}/bmad/autonomy/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  return handleResponse(res)
+}
+
+export async function stopAutonomyMode(): Promise<{ message: string }> {
+  const res = await fetch(`${API_BASE}/bmad/autonomy/stop`, { method: 'POST' })
+  return handleResponse(res)
+}
+
 // -----------------------------------------------------------------------------
 // Files
 // -----------------------------------------------------------------------------

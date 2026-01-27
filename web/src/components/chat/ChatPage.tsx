@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Loader2, Copy, Check, Settings2, Shield, Globe, FileText, X, Paperclip, Image, Plus, Edit2, Trash2, RotateCcw, StopCircle, Users, Brain, MessageSquare, History } from 'lucide-react'
+import { Send, Loader2, Copy, Check, Settings2, Shield, Globe, FileText, X, Paperclip, Image, Plus, Edit2, Trash2, RotateCcw, StopCircle, Users, Brain, MessageSquare, History, ChevronDown, ChevronRight } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -11,7 +11,7 @@ type ChatMode = 'standard' | 'multi-agent' | 'reflection'
 
 interface Message {
   id: string
-  role: 'user' | 'assistant' | 'system' | 'tool' | 'synthesis'
+  role: 'user' | 'assistant' | 'system' | 'tool' | 'synthesis' | 'agent'
   content: string
   timestamp: Date
   model?: string
@@ -20,6 +20,7 @@ interface Message {
   searchResults?: api.SearchResult[]
   agentName?: string // For multi-agent mode
   isReflection?: boolean // For reflection mode
+  isCollapsed?: boolean // For collapsible agent responses
 }
 
 interface Conversation {
@@ -72,6 +73,7 @@ export function ChatPage() {
   const [selectedModels, setSelectedModels] = useState<string[]>([]) // For multi-agent mode
   const [reflectionDepth, setReflectionDepth] = useState(2) // For reflection mode
   const [isProcessingMulti, setIsProcessingMulti] = useState(false)
+  const [collapsedAgents, setCollapsedAgents] = useState<Set<string>>(new Set()) // Track collapsed agent messages
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -239,15 +241,30 @@ export function ChatPage() {
     },
   })
   
+  // Toggle agent message collapse state
+  const toggleAgentCollapse = (messageId: string) => {
+    setCollapsedAgents(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId)
+      } else {
+        newSet.add(messageId)
+      }
+      return newSet
+    })
+  }
+  
   // Multi-agent mode: query multiple models and synthesize
   const handleMultiAgentChat = async (text: string, messageContent: string) => {
     if (selectedModels.length < 2) {
-      alert('Please select at least 2 models for Multi-Agent mode')
+      alert('Veuillez sélectionner au moins 2 modèles pour le mode Multi-Agent')
       return
     }
     
     setIsProcessingMulti(true)
-    const responses: { model: string; content: string }[] = []
+    const responses: { model: string; content: string; duration_ms: number; messageId: string }[] = []
+    const errors: { model: string; error: string }[] = []
+    const agentMessageIds: string[] = []
     
     // Add user message
     const userMessage: Message = {
@@ -266,58 +283,113 @@ export function ChatPage() {
     setInput('')
     setAttachedFiles([])
     
-    // Query each model
-    for (const model of selectedModels) {
+    // Add processing indicator
+    const processingId = `processing-${Date.now()}`
+    const processingMessage: Message = {
+      id: processingId,
+      role: 'system',
+      content: `🔄 **Multi-Agent Processing** - Querying ${selectedModels.length} models: ${selectedModels.join(', ')}...`,
+      timestamp: new Date(),
+    }
+    setMessages(prev => [...prev, processingMessage])
+    
+    // Query each model sequentially
+    for (let i = 0; i < selectedModels.length; i++) {
+      const model = selectedModels[i]
+      
+      // Update processing message
+      setMessages(prev => prev.map(m => 
+        m.id === processingId 
+          ? { ...m, content: `🔄 **Multi-Agent Processing** - Model ${i + 1}/${selectedModels.length}: ${model}...` }
+          : m
+      ))
+      
       try {
+        console.log(`[Multi-Agent] Querying model: ${model}`)
         const data = await api.generateChat({
           message: messageContent,
           model,
           hat: selectedHat || undefined,
-          web_search: webSearchEnabled,
+          web_search: i === 0 ? webSearchEnabled : false, // Only search on first model
         })
         
-        responses.push({ model, content: data.content })
+        console.log(`[Multi-Agent] Response from ${model}:`, data.content.slice(0, 100))
+        const agentMsgId = `agent-${Date.now()}-${model.replace(/[^a-zA-Z0-9]/g, '')}`
+        responses.push({ model, content: data.content, duration_ms: data.duration_ms, messageId: agentMsgId })
+        agentMessageIds.push(agentMsgId)
         
-        // Add individual agent response
+        // Add individual agent response (collapsed by default)
         const agentMessage: Message = {
-          id: `${Date.now()}-${model}`,
-          role: 'assistant',
+          id: agentMsgId,
+          role: 'agent',
           content: data.content,
           timestamp: new Date(),
           model,
           agentName: model.split(':')[0],
           duration_ms: data.duration_ms,
+          isCollapsed: true, // Collapsed by default
         }
         
+        // Collapse this agent by default
+        setCollapsedAgents(prev => new Set([...prev, agentMsgId]))
+        
         setMessages(prev => {
+          // Keep processing indicator, add agent message
           const newMessages = [...prev, agentMessage]
-          updateConversation(newMessages)
           return newMessages
         })
       } catch (e) {
-        console.error(`Error from model ${model}:`, e)
+        const errorMsg = e instanceof Error ? e.message : 'Unknown error'
+        console.error(`[Multi-Agent] Error from model ${model}:`, errorMsg)
+        errors.push({ model, error: errorMsg })
       }
     }
     
-    // Synthesize responses
+    // Remove processing indicator
+    setMessages(prev => prev.filter(m => m.id !== processingId))
+    
+    // Show errors for failed models
+    if (errors.length > 0) {
+      const errorSummary: Message = {
+        id: `${Date.now()}-errors`,
+        role: 'system',
+        content: `⚠️ **${errors.length} model(s) failed:**\n${errors.map(e => `• ${e.model}: ${e.error}`).join('\n')}`,
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, errorSummary])
+    }
+    
+    // Synthesize responses if we have at least 2 successful responses
     if (responses.length >= 2) {
-      const synthesisPrompt = `You are a synthesis agent. Multiple AI agents have provided responses to the user's query. Your task is to:
-1. Cross-check the information provided by each agent
-2. Identify points of agreement and disagreement
-3. Synthesize a comprehensive, accurate response that combines the best insights
-4. Flag any contradictions or uncertainties
+      // Add synthesis processing indicator
+      const synthProcessingMsg: Message = {
+        id: 'synth-processing',
+        role: 'system',
+        content: `🔄 **Synthesis** - Cross-checking ${responses.length} agent responses...`,
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, synthProcessingMsg])
+      
+      const synthesisPrompt = `Tu es un agent de synthèse expert. Plusieurs agents IA ont fourni des réponses à la requête utilisateur. Ta tâche est de:
+1. Vérifier et cross-checker les informations fournies par chaque agent
+2. Identifier les points d'accord et de désaccord
+3. Synthétiser une réponse complète et précise combinant les meilleures insights
+4. Signaler toute contradiction ou incertitude
 
-User query: "${text}"
+**Requête utilisateur:** "${text}"
 
-Agent responses:
-${responses.map(r => `### ${r.model}:\n${r.content}`).join('\n\n')}
+**Réponses des agents:**
+${responses.map(r => `### ${r.model} (${(r.duration_ms / 1000).toFixed(1)}s):\n${r.content}`).join('\n\n---\n\n')}
 
-Please provide a synthesized response:`
+**Fournis une réponse de synthèse structurée avec:**
+- ✅ Points d'accord entre agents
+- ⚠️ Contradictions ou incertitudes
+- 📝 Synthèse finale consolidée`
       
       try {
         const synthesisData = await api.generateChat({
           message: synthesisPrompt,
-          system_prompt: 'You are a careful synthesis agent that cross-checks information and provides accurate, comprehensive responses.',
+          system_prompt: 'Tu es un agent de synthèse méticuleux qui cross-check les informations et fournit des réponses précises et complètes. Réponds en français.',
         })
         
         const synthesisMessage: Message = {
@@ -326,17 +398,62 @@ Please provide a synthesized response:`
           content: synthesisData.content,
           timestamp: new Date(),
           model: synthesisData.model,
-          agentName: '🔄 Synthesis',
+          agentName: 'Synthèse Cross-Checkée',
+          duration_ms: synthesisData.duration_ms,
         }
         
         setMessages(prev => {
-          const newMessages = [...prev, synthesisMessage]
+          const filtered = prev.filter(m => m.id !== 'synth-processing')
+          const newMessages = [...filtered, synthesisMessage]
           updateConversation(newMessages)
           return newMessages
         })
       } catch (e) {
-        console.error('Synthesis error:', e)
+        console.error('[Multi-Agent] Synthesis error:', e)
+        const synthErrorMsg: Message = {
+          id: `${Date.now()}-synth-error`,
+          role: 'system',
+          content: `❌ **Erreur de synthèse**: ${e instanceof Error ? e.message : 'Erreur inconnue'}`,
+          timestamp: new Date(),
+        }
+        setMessages(prev => {
+          const filtered = prev.filter(m => m.id !== 'synth-processing')
+          const newMessages = [...filtered, synthErrorMsg]
+          updateConversation(newMessages)
+          return newMessages
+        })
       }
+    } else if (responses.length === 1) {
+      // Only one model responded - expand it and show warning
+      const singleModel = responses[0]
+      setCollapsedAgents(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(singleModel.messageId)
+        return newSet
+      })
+      const msg: Message = {
+        id: `${Date.now()}-single`,
+        role: 'system',
+        content: `⚠️ Un seul modèle a répondu (${singleModel.model}). La synthèse nécessite au moins 2 réponses. La réponse ci-dessus est affichée directement.`,
+        timestamp: new Date(),
+      }
+      setMessages(prev => {
+        const newMessages = [...prev, msg]
+        updateConversation(newMessages)
+        return newMessages
+      })
+    } else if (errors.length > 0 && responses.length === 0) {
+      const msg: Message = {
+        id: `${Date.now()}-all-errors`,
+        role: 'system',
+        content: `❌ **Tous les modèles ont échoué.** Veuillez vérifier que les modèles sont disponibles et réessayer.`,
+        timestamp: new Date(),
+      }
+      setMessages(prev => {
+        const newMessages = [...prev, msg]
+        updateConversation(newMessages)
+        return newMessages
+      })
     }
     
     setIsProcessingMulti(false)
@@ -963,7 +1080,11 @@ Reflection ${i + 1}/${reflectionDepth}:`
             </div>
           )}
 
-          {messages.map((message) => (
+          {messages.map((message) => {
+            const isAgent = message.role === 'agent'
+            const isCollapsed = isAgent && collapsedAgents.has(message.id)
+            
+            return (
             <div
               key={message.id}
               className={clsx(
@@ -973,18 +1094,19 @@ Reflection ${i + 1}/${reflectionDepth}:`
             >
               <div
                 className={clsx(
-                  'max-w-3xl rounded-lg p-4',
+                  'max-w-3xl rounded-lg',
+                  isCollapsed ? 'p-2' : 'p-4',
                   message.role === 'user' && 'bg-freya-accent-blue/20 border border-freya-accent-blue/30',
-                  message.role === 'assistant' && !message.agentName && 'bg-freya-bg-tertiary border border-freya-border',
-                  message.role === 'assistant' && message.agentName && 'bg-freya-accent-purple/10 border border-freya-accent-purple/30',
-                  message.role === 'synthesis' && 'bg-freya-accent-green/10 border border-freya-accent-green/30',
-                  message.role === 'system' && 'bg-freya-accent-red/10 border border-freya-accent-red/30',
+                  message.role === 'assistant' && 'bg-freya-bg-tertiary border border-freya-border',
+                  message.role === 'agent' && 'bg-freya-accent-purple/10 border border-freya-accent-purple/30',
+                  message.role === 'synthesis' && 'bg-freya-accent-green/15 border-2 border-freya-accent-green/50 shadow-lg',
+                  message.role === 'system' && 'bg-freya-accent-yellow/10 border border-freya-accent-yellow/30',
                   message.role === 'tool' && 'bg-freya-accent-purple/10 border border-freya-accent-purple/30',
                   message.isReflection && 'bg-freya-accent-cyan/10 border border-freya-accent-cyan/30'
                 )}
               >
                 {/* Attachments preview for user messages */}
-                {message.attachments && message.attachments.length > 0 && (
+                {message.attachments && message.attachments.length > 0 && !isCollapsed && (
                   <div className="flex flex-wrap gap-2 mb-2">
                     {message.attachments.map((file, idx) => (
                       <div key={idx} className="flex items-center gap-1 px-2 py-1 rounded bg-freya-bg-primary text-xs">
@@ -1000,24 +1122,41 @@ Reflection ${i + 1}/${reflectionDepth}:`
                 )}
                 
                 {/* Header */}
-                <div className="flex items-center justify-between mb-2">
+                <div className={clsx(
+                  'flex items-center justify-between',
+                  !isCollapsed && 'mb-2'
+                )}>
                   <div className="flex items-center gap-2">
+                    {/* Collapse toggle for agent messages */}
+                    {isAgent && (
+                      <button
+                        onClick={() => toggleAgentCollapse(message.id)}
+                        className="p-0.5 rounded hover:bg-freya-bg-tertiary transition-colors"
+                        title={isCollapsed ? 'Expand response' : 'Collapse response'}
+                      >
+                        {isCollapsed ? (
+                          <ChevronRight className="w-4 h-4 text-freya-accent-purple" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-freya-accent-purple" />
+                        )}
+                      </button>
+                    )}
                     <span className={clsx(
                       'text-xs font-medium',
                       message.role === 'user' && 'text-freya-accent-blue',
-                      message.role === 'assistant' && !message.agentName && 'text-freya-accent-green',
-                      message.role === 'assistant' && message.agentName && 'text-freya-accent-purple',
-                      message.role === 'synthesis' && 'text-freya-accent-green',
-                      message.role === 'system' && 'text-freya-accent-red',
+                      message.role === 'assistant' && 'text-freya-accent-green',
+                      message.role === 'agent' && 'text-freya-accent-purple',
+                      message.role === 'synthesis' && 'text-freya-accent-green font-semibold',
+                      message.role === 'system' && 'text-freya-accent-yellow',
                       message.role === 'tool' && 'text-freya-accent-purple',
                       message.isReflection && 'text-freya-accent-cyan'
                     )}>
                       {message.role === 'user' ? 'You' : 
-                       message.role === 'synthesis' ? '🔄 Synthesis' :
-                       message.agentName ? `🤖 ${message.agentName}` :
+                       message.role === 'synthesis' ? '🔄 Synthèse Cross-Checkée' :
+                       message.role === 'agent' ? `🤖 ${message.agentName || 'Agent'}` :
                        message.isReflection ? '🔍 Reflection' :
                        message.role === 'assistant' ? 'Freya' :
-                       message.role === 'tool' ? 'Tool' : 'System'}
+                       message.role === 'tool' ? 'Tool' : 'ℹ️ Info'}
                     </span>
                     {message.model && (
                       <span className="text-xs text-freya-text-muted">
@@ -1035,6 +1174,11 @@ Reflection ${i + 1}/${reflectionDepth}:`
                         {message.searchResults.length} sources
                       </span>
                     )}
+                    {isCollapsed && (
+                      <span className="text-xs text-freya-text-muted italic">
+                        (click to expand)
+                      </span>
+                    )}
                   </div>
                   
                   {/* Actions */}
@@ -1048,54 +1192,64 @@ Reflection ${i + 1}/${reflectionDepth}:`
                         <Edit2 className="w-4 h-4 text-freya-text-muted" />
                       </button>
                     )}
-                    <button
-                      onClick={() => copyMessage(message.content, message.id)}
-                      className="p-1 rounded hover:bg-freya-bg-primary/50 transition-colors"
-                      title="Copy"
-                    >
-                      {copiedId === message.id ? (
-                        <Check className="w-4 h-4 text-freya-accent-green" />
-                      ) : (
-                        <Copy className="w-4 h-4 text-freya-text-muted" />
-                      )}
-                    </button>
+                    {!isCollapsed && (
+                      <button
+                        onClick={() => copyMessage(message.content, message.id)}
+                        className="p-1 rounded hover:bg-freya-bg-primary/50 transition-colors"
+                        title="Copy"
+                      >
+                        {copiedId === message.id ? (
+                          <Check className="w-4 h-4 text-freya-accent-green" />
+                        ) : (
+                          <Copy className="w-4 h-4 text-freya-text-muted" />
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {/* Content */}
-                {editingMessageId === message.id ? (
-                  <div className="space-y-2">
-                    <textarea
-                      value={editContent}
-                      onChange={(e) => setEditContent(e.target.value)}
-                      className="w-full p-2 rounded bg-freya-bg-primary border border-freya-border text-sm"
-                      rows={3}
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => saveEditedMessage(message.id)}
-                        className="btn-primary text-xs px-2 py-1"
-                      >
-                        Save (removes context)
-                      </button>
-                      <button
-                        onClick={cancelEdit}
-                        className="btn-ghost text-xs px-2 py-1"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="prose-freya">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {message.content}
-                    </ReactMarkdown>
-                  </div>
+                {/* Content - hidden when collapsed */}
+                {!isCollapsed && (
+                  <>
+                    {editingMessageId === message.id ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          className="w-full p-2 rounded bg-freya-bg-primary border border-freya-border text-sm"
+                          rows={3}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => saveEditedMessage(message.id)}
+                            className="btn-primary text-xs px-2 py-1"
+                          >
+                            Save (removes context)
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            className="btn-ghost text-xs px-2 py-1"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={clsx(
+                        'prose-freya',
+                        message.role === 'synthesis' && 'text-freya-text-primary'
+                      )}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
-          ))}
+          )})}
+          
 
           {/* Loading indicator with cancel */}
           {chatMutation.isPending && (
