@@ -1,13 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Loader2, Copy, Check, Settings2, Shield, Globe, FileText, X, Paperclip, Image, Plus, Edit2, Trash2, RotateCcw, StopCircle, Users, Brain, MessageSquare, History, ChevronDown, ChevronRight } from 'lucide-react'
+import { Send, Loader2, Copy, Check, Settings2, Shield, Globe, FileText, X, Paperclip, Image, Plus, Edit2, Trash2, RotateCcw, StopCircle, Users, Brain, MessageSquare, History, ChevronDown, ChevronRight, Search, Lightbulb, Rocket, TrendingUp } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { clsx } from 'clsx'
 import * as api from '../../lib/api'
+import { useAppStore } from '../../stores/appStore'
 
-// Chat modes
-type ChatMode = 'standard' | 'multi-agent' | 'reflection'
+// Chat modes - Added 'research' mode
+type ChatMode = 'standard' | 'multi-agent' | 'reflection' | 'research'
+
+// Research phases
+type ResearchPhase = 'idle' | 'searching' | 'analyzing' | 'briefing' | 'bmad_ready' | 'bmad'
 
 interface Message {
   id: string
@@ -74,6 +78,13 @@ export function ChatPage() {
   const [reflectionDepth, setReflectionDepth] = useState(2) // For reflection mode
   const [isProcessingMulti, setIsProcessingMulti] = useState(false)
   const [collapsedAgents, setCollapsedAgents] = useState<Set<string>>(new Set()) // Track collapsed agent messages
+  
+  // Research mode state
+  const [researchPhase, setResearchPhase] = useState<ResearchPhase>('idle')
+  const [researchAnalysis, setResearchAnalysis] = useState<string | null>(null)
+  
+  // Global store for research state persistence
+  const { setResearchState } = useAppStore()
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -257,10 +268,18 @@ export function ChatPage() {
   // Multi-agent mode: query multiple models and synthesize
   const handleMultiAgentChat = async (text: string, messageContent: string) => {
     if (selectedModels.length < 2) {
-      alert('Veuillez sélectionner au moins 2 modèles pour le mode Multi-Agent')
+      // Show error in chat instead of alert
+      const errorMsg: Message = {
+        id: `error-${Date.now()}`,
+        role: 'system',
+        content: `⚠️ **Mode Multi-Agent**: Veuillez sélectionner au moins 2 modèles. Actuellement sélectionnés: ${selectedModels.length}`,
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, errorMsg])
       return
     }
     
+    console.log('[Multi-Agent] Starting with models:', selectedModels)
     setIsProcessingMulti(true)
     const responses: { model: string; content: string; duration_ms: number; messageId: string }[] = []
     const errors: { model: string; error: string }[] = []
@@ -283,12 +302,12 @@ export function ChatPage() {
     setInput('')
     setAttachedFiles([])
     
-    // Add processing indicator
+    // Add processing indicator with thinking animation
     const processingId = `processing-${Date.now()}`
     const processingMessage: Message = {
       id: processingId,
       role: 'system',
-      content: `🔄 **Multi-Agent Processing** - Querying ${selectedModels.length} models: ${selectedModels.join(', ')}...`,
+      content: `🧠 **Multi-Agent Processing** - Querying ${selectedModels.length} models...\n\n${selectedModels.map((m, i) => `${i === 0 ? '🔄' : '⏳'} ${m}`).join('\n')}`,
       timestamp: new Date(),
     }
     setMessages(prev => [...prev, processingMessage])
@@ -297,10 +316,16 @@ export function ChatPage() {
     for (let i = 0; i < selectedModels.length; i++) {
       const model = selectedModels[i]
       
-      // Update processing message
+      // Update processing message with visual indicators
+      const statusLines = selectedModels.map((m, idx) => {
+        if (idx < i) return `✅ ${m}`
+        if (idx === i) return `🧠 ${m} (thinking...)`
+        return `⏳ ${m}`
+      }).join('\n')
+      
       setMessages(prev => prev.map(m => 
         m.id === processingId 
-          ? { ...m, content: `🔄 **Multi-Agent Processing** - Model ${i + 1}/${selectedModels.length}: ${model}...` }
+          ? { ...m, content: `🧠 **Multi-Agent Processing** - Model ${i + 1}/${selectedModels.length}\n\n${statusLines}` }
           : m
       ))
       
@@ -311,6 +336,7 @@ export function ChatPage() {
           model,
           hat: selectedHat || undefined,
           web_search: i === 0 ? webSearchEnabled : false, // Only search on first model
+          max_tokens: 2048,
         })
         
         console.log(`[Multi-Agent] Response from ${model}:`, data.content.slice(0, 100))
@@ -558,6 +584,178 @@ Reflection ${i + 1}/${reflectionDepth}:`
     
     setIsProcessingMulti(false)
   }
+  
+  // Research mode: Internet search → Analysis → BMAD Analyst briefing
+  const handleResearchChat = async (text: string) => {
+    setIsProcessingMulti(true)
+    setResearchPhase('searching')
+    
+    // Add user message
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: text,
+      timestamp: new Date(),
+    }
+    setMessages(prev => [...prev, userMessage])
+    setInput('')
+    
+    // Phase 1: Web Search for market research
+    const searchMsg: Message = {
+      id: `research-search-${Date.now()}`,
+      role: 'system',
+      content: `🔍 **Phase 1/4: Recherche Internet**\n\nRecherche en cours pour: "${text}"...`,
+      timestamp: new Date(),
+    }
+    setMessages(prev => [...prev, searchMsg])
+    
+    let allSearchResults: api.SearchResult[] = []
+    
+    try {
+      // Search for market opportunities
+      const marketSearch = await api.webSearch(`${text} application market opportunity 2024 2025`, 5)
+      const techSearch = await api.webSearch(`${text} technical feasibility no-code low-code`, 5)
+      const competitorSearch = await api.webSearch(`${text} competitors alternatives pricing`, 5)
+      
+      allSearchResults = [...marketSearch, ...techSearch, ...competitorSearch]
+      // Store results in local state for analysis
+      
+      // Update with results
+      setMessages(prev => prev.map(m => 
+        m.id === searchMsg.id 
+          ? { ...m, content: `✅ **Phase 1/4: Recherche Internet**\n\n${allSearchResults.length} résultats trouvés:\n${allSearchResults.slice(0, 5).map(r => `• [${r.title}](${r.url})`).join('\n')}` }
+          : m
+      ))
+    } catch (e) {
+      console.error('[Research] Search error:', e)
+      setMessages(prev => prev.map(m => 
+        m.id === searchMsg.id 
+          ? { ...m, content: `⚠️ **Phase 1/4: Recherche Internet**\n\nRecherche limitée. Continuation avec les données disponibles...` }
+          : m
+      ))
+    }
+    
+    // Phase 2: Analysis by Research Analyst
+    setResearchPhase('analyzing')
+    const analysisMsg: Message = {
+      id: `research-analysis-${Date.now()}`,
+      role: 'system',
+      content: `🧠 **Phase 2/4: Analyse de Marché**\n\nL'Analyste de Recherche examine les opportunités...`,
+      timestamp: new Date(),
+    }
+    setMessages(prev => [...prev, analysisMsg])
+    
+    try {
+      const analysisPrompt = `Tu es un Analyste de Recherche spécialisé en opportunités d'applications rentables et réalisables.
+
+**Contexte de recherche:** "${text}"
+
+**Données collectées:**
+${allSearchResults.map(r => `- ${r.title}: ${r.snippet}`).join('\n')}
+
+**Ta mission:**
+1. 📊 **Analyse de Marché**: Identifie les opportunités concrètes
+2. 💰 **Potentiel de Rentabilité**: Estime le potentiel (faible/moyen/élevé)
+3. 🛠️ **Faisabilité Technique**: Évalue si c'est réalisable avec des outils no-code/low-code
+4. 🎯 **Recommandation Top 3**: Liste les 3 meilleures idées d'applications à développer
+5. ⚠️ **Risques et Défis**: Identifie les obstacles potentiels
+
+Fournis une analyse structurée et actionnable.`
+
+      const analysisData = await api.generateChat({
+        message: analysisPrompt,
+        system_prompt: 'Tu es un analyste de recherche de marché expert en applications SaaS et produits tech. Tu fournis des analyses détaillées et actionnables.',
+        max_tokens: 2048,
+      })
+      
+      setResearchAnalysis(analysisData.content)
+      
+      const analysisResult: Message = {
+        id: `research-result-${Date.now()}`,
+        role: 'assistant',
+        content: `## 📊 Rapport d'Analyse de Marché\n\n${analysisData.content}`,
+        timestamp: new Date(),
+        model: analysisData.model,
+        agentName: 'Research Analyst',
+      }
+      
+      // Remove processing message and add result
+      setMessages(prev => {
+        const filtered = prev.filter(m => m.id !== analysisMsg.id)
+        return [...filtered, analysisResult]
+      })
+    } catch (e) {
+      console.error('[Research] Analysis error:', e)
+      setMessages(prev => prev.map(m => 
+        m.id === analysisMsg.id 
+          ? { ...m, content: `❌ **Phase 2/4: Analyse échouée**\n\n${e instanceof Error ? e.message : 'Erreur inconnue'}` }
+          : m
+      ))
+    }
+    
+    // Phase 3: Briefing for BMAD Analyst
+    setResearchPhase('briefing')
+    const briefingMsg: Message = {
+      id: `research-briefing-${Date.now()}`,
+      role: 'system',
+      content: `📋 **Phase 3/4: Préparation du Brief BMAD**\n\nPréparation du brief pour l'Analyste BMAD...`,
+      timestamp: new Date(),
+    }
+    setMessages(prev => [...prev, briefingMsg])
+    
+    try {
+      const briefPrompt = `Basé sur cette analyse de marché:
+
+${researchAnalysis || 'Analyse non disponible'}
+
+Prépare un brief structuré pour l'Analyste BMAD qui va lancer le développement. Le brief doit inclure:
+
+1. **Idée sélectionnée**: L'application la plus prometteuse
+2. **Objectif principal**: Ce que l'app doit accomplir
+3. **Utilisateurs cibles**: Qui va utiliser l'app
+4. **Fonctionnalités clés**: 3-5 features essentielles
+5. **Proposition de valeur**: Pourquoi les utilisateurs paieraient
+6. **Stack technique suggéré**: Technologies recommandées (no-code si possible)
+7. **MVP Timeline**: Estimation réaliste
+
+Format: Brief concis et actionnable pour démarrer un projet BMAD.`
+
+      const briefData = await api.generateChat({
+        message: briefPrompt,
+        system_prompt: 'Tu es un consultant stratégique qui prépare des briefs projets clairs et actionnables.',
+        max_tokens: 1500,
+      })
+      
+      const briefResult: Message = {
+        id: `research-brief-${Date.now()}`,
+        role: 'synthesis',
+        content: `## 📋 Brief Projet BMAD\n\n${briefData.content}\n\n---\n\n🚀 **Prêt à lancer le projet BMAD?** Cliquez sur "Lancer BMAD" pour transférer ce brief à l'équipe BMAD.`,
+        timestamp: new Date(),
+        model: briefData.model,
+        agentName: 'Strategic Brief',
+      }
+      
+      // Update state for BMAD handoff
+      setResearchState({
+        isActive: true,
+        phase: 'bmad_ready' as ResearchPhase,
+        searchResults: allSearchResults,
+        analysisReport: researchAnalysis,
+        selectedIdea: briefData.content,
+      })
+      
+      setMessages(prev => {
+        const filtered = prev.filter(m => m.id !== briefingMsg.id)
+        return [...filtered, briefResult]
+      })
+      
+      setResearchPhase('bmad_ready')
+    } catch (e) {
+      console.error('[Research] Briefing error:', e)
+    }
+    
+    setIsProcessingMulti(false)
+  }
 
   // Search mutation
   const searchMutation = useMutation({
@@ -628,6 +826,11 @@ Reflection ${i + 1}/${reflectionDepth}:`
     
     if (chatMode === 'reflection') {
       handleReflectionChat(text, messageContent)
+      return
+    }
+    
+    if (chatMode === 'research') {
+      handleResearchChat(text)
       return
     }
 
@@ -931,6 +1134,19 @@ Reflection ${i + 1}/${reflectionDepth}:`
               <Brain className="w-4 h-4" />
               <span className="hidden sm:inline">Reflection</span>
             </button>
+            <button
+              onClick={() => setChatMode('research')}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-all',
+                chatMode === 'research'
+                  ? 'bg-freya-accent-yellow/20 text-freya-accent-yellow shadow'
+                  : 'text-freya-text-muted hover:text-freya-text-secondary'
+              )}
+              title="Research mode: Internet search → Market analysis → BMAD brief"
+            >
+              <Search className="w-4 h-4" />
+              <span className="hidden sm:inline">Research</span>
+            </button>
           </div>
           
           <div className="h-6 w-px bg-freya-border" />
@@ -1042,6 +1258,52 @@ Reflection ${i + 1}/${reflectionDepth}:`
               <span className="text-xs text-freya-text-muted">
                 {reflectionDepth} iteration{reflectionDepth > 1 ? 's' : ''} of self-critique and improvement
               </span>
+            </div>
+          </div>
+        )}
+        
+        {chatMode === 'research' && (
+          <div className="p-3 border-b border-freya-border bg-freya-accent-yellow/5">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Search className="w-4 h-4 text-freya-accent-yellow" />
+                <span className="text-sm font-medium text-freya-text-primary">Research Mode</span>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-freya-text-muted">
+                <span className="flex items-center gap-1">
+                  <Globe className="w-3 h-3" />
+                  Internet Search
+                </span>
+                <span>→</span>
+                <span className="flex items-center gap-1">
+                  <TrendingUp className="w-3 h-3" />
+                  Market Analysis
+                </span>
+                <span>→</span>
+                <span className="flex items-center gap-1">
+                  <Lightbulb className="w-3 h-3" />
+                  BMAD Brief
+                </span>
+                <span>→</span>
+                <span className="flex items-center gap-1">
+                  <Rocket className="w-3 h-3" />
+                  Launch Project
+                </span>
+              </div>
+              {researchPhase !== 'idle' && (
+                <span className={clsx(
+                  'badge',
+                  researchPhase === 'searching' && 'badge-blue',
+                  researchPhase === 'analyzing' && 'badge-purple',
+                  researchPhase === 'briefing' && 'badge-cyan',
+                  researchPhase === 'bmad_ready' && 'badge-green'
+                )}>
+                  {researchPhase === 'searching' && '🔍 Recherche...'}
+                  {researchPhase === 'analyzing' && '🧠 Analyse...'}
+                  {researchPhase === 'briefing' && '📋 Brief...'}
+                  {researchPhase === 'bmad_ready' && '✅ Prêt pour BMAD'}
+                </span>
+              )}
             </div>
           </div>
         )}

@@ -51,6 +51,9 @@ import { clsx } from 'clsx'
 import * as api from '../../lib/api'
 import { useAppStore } from '../../stores/appStore'
 
+// Persist bench state keys
+const BENCH_STORAGE_KEY = 'freya_bench_state'
+
 // Benchmark program types
 type BenchProgram = 'bench-fast' | 'bench-standard' | 'bench-advanced'
 
@@ -125,7 +128,7 @@ interface ImportedBenchmark {
 
 export function BenchPage() {
   const queryClient = useQueryClient()
-  const { benchProgress, setBenchProgress } = useAppStore()
+  const { benchProgress, setBenchProgress, benchHistoryCache, setBenchHistoryCache } = useAppStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   // Prevent double-start (fixes 409 Conflict errors)
@@ -169,6 +172,39 @@ export function BenchPage() {
   
   // Show/hide detailed metrics
   const [showDetailedMetrics, setShowDetailedMetrics] = useState(true)
+  
+  // Load persisted state on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(BENCH_STORAGE_KEY)
+      if (saved) {
+        const state = JSON.parse(saved)
+        if (state.selectedProgram) setSelectedProgram(state.selectedProgram)
+        if (state.expandedRole) setExpandedRole(state.expandedRole)
+        if (state.modelOverrides) setModelOverrides(state.modelOverrides)
+        if (state.showDetailedMetrics !== undefined) setShowDetailedMetrics(state.showDetailedMetrics)
+        if (state.trialsConfig) setTrialsConfig(state.trialsConfig)
+      }
+    } catch (e) {
+      console.error('[Bench] Failed to load saved state:', e)
+    }
+  }, [])
+  
+  // Save state to localStorage when it changes
+  useEffect(() => {
+    try {
+      const state = {
+        selectedProgram,
+        expandedRole,
+        modelOverrides,
+        showDetailedMetrics,
+        trialsConfig,
+      }
+      localStorage.setItem(BENCH_STORAGE_KEY, JSON.stringify(state))
+    } catch (e) {
+      console.error('[Bench] Failed to save state:', e)
+    }
+  }, [selectedProgram, expandedRole, modelOverrides, showDetailedMetrics, trialsConfig])
 
   // Fetch current bench status
   const { data: status, refetch: refetchStatus } = useQuery({
@@ -240,6 +276,31 @@ export function BenchPage() {
       historyError: historyError?.message
     })
   }, [history, historyFast, historyStandard, historyAdvanced, selectedProgram, historyLoading, historyError])
+  
+  // Persist bench results to global store for tab switching
+  useEffect(() => {
+    if (billboard && billboard.length > 0) {
+      setBenchHistoryCache({ billboard })
+    }
+    if (historyFast && historyFast.length > 0) {
+      setBenchHistoryCache({ 'bench-fast': historyFast })
+    }
+    if (historyStandard && historyStandard.length > 0) {
+      setBenchHistoryCache({ 'bench-standard': historyStandard })
+    }
+    if (historyAdvanced && historyAdvanced.length > 0) {
+      setBenchHistoryCache({ 'bench-advanced': historyAdvanced })
+    }
+  }, [billboard, historyFast, historyStandard, historyAdvanced, setBenchHistoryCache])
+  
+  // Use cached data if API data is empty (tab switching recovery)
+  const effectiveHistory = (history && history.length > 0) 
+    ? history 
+    : (benchHistoryCache[selectedProgram] as api.BenchResult[] || [])
+  
+  const effectiveBillboard = (billboard && billboard.length > 0)
+    ? billboard
+    : (benchHistoryCache.billboard as api.BillboardEntry[] || [])
 
   // Fetch models for manual selection
   const { data: models } = useQuery({
@@ -445,9 +506,9 @@ export function BenchPage() {
     startMutation.mutate('bench-fast')
   }
 
-  // Group history by role
+  // Group history by role (use effective data for persistence)
   const historyByRole = ROLES.reduce((acc, role) => {
-    acc[role] = history?.filter(h => h.role === role) || []
+    acc[role] = effectiveHistory.filter(h => h.role === role) || []
     return acc
   }, {} as Record<string, api.BenchResult[]>)
 
@@ -462,13 +523,13 @@ export function BenchPage() {
     return byModel
   }
 
-  // Get best model for each role from billboard
-  const bestByRole = billboard?.reduce((acc, entry) => {
+  // Get best model for each role from billboard (use effective data)
+  const bestByRole = effectiveBillboard.reduce((acc, entry) => {
     if (!acc[entry.role] || entry.score > acc[entry.role].score) {
       acc[entry.role] = entry
     }
     return acc
-  }, {} as Record<string, api.BillboardEntry>) || {}
+  }, {} as Record<string, api.BillboardEntry>)
 
   // Get effective model for a role (override or best)
   const getEffectiveModel = (role: string): string | null => {
@@ -511,13 +572,13 @@ export function BenchPage() {
     }
   }
 
-  // Export results
+  // Export results (use effective data)
   const exportResults = (format: 'json' | 'csv') => {
     const data = {
       exported_at: new Date().toISOString(),
       program: selectedProgram,
-      billboard: billboard,
-      history: history,
+      billboard: effectiveBillboard,
+      history: effectiveHistory,
       overrides: modelOverrides
     }
     
@@ -532,7 +593,7 @@ export function BenchPage() {
     } else {
       // CSV export
       const rows = [['Role', 'Model', 'Phase', 'Score', 'Latency (ms)', 'Status']]
-      history?.forEach(h => {
+      effectiveHistory.forEach(h => {
         rows.push([h.role, h.model, h.phase, h.score.toString(), h.latency_ms.toString(), h.status])
       })
       content = rows.map(r => r.join(',')).join('\n')
@@ -982,8 +1043,31 @@ export function BenchPage() {
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-freya-accent-cyan" />
                 <h3 className="font-semibold text-freya-text-primary">Detailed Results</h3>
+                {effectiveHistory.length > 0 && (
+                  <span className="badge badge-blue text-xs">{effectiveHistory.length} entries</span>
+                )}
               </div>
               <div className="flex items-center gap-2">
+                {/* Quick Export Buttons */}
+                {effectiveHistory.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => exportResults('json')}
+                      className="p-1.5 rounded hover:bg-freya-bg-tertiary text-freya-text-muted hover:text-freya-accent-cyan transition-colors"
+                      title="Export JSON"
+                    >
+                      <FileJson className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => exportResults('csv')}
+                      className="p-1.5 rounded hover:bg-freya-bg-tertiary text-freya-text-muted hover:text-freya-accent-green transition-colors"
+                      title="Export CSV"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                    </button>
+                    <div className="w-px h-4 bg-freya-border mx-1" />
+                  </>
+                )}
                 <button
                   onClick={() => setShowDetailedMetrics(!showDetailedMetrics)}
                   className={clsx(

@@ -1,8 +1,13 @@
 /**
- * BMADPage - BMAD Studio v2.2
+ * BMADPage - BMAD Studio v2.5
  * 
- * Professional interface for managing the BMAD (Business Model - Architecture - Development)
- * workflow with interactive brainstorming, real-time agent monitoring, and continuous pipeline.
+ * Refactored UX for intuitive, dynamic, and intelligent workflow management.
+ * Features:
+ * - Real-time pipeline overview with visual progress
+ * - Contextual AI-powered suggestions
+ * - Seamless Research mode integration
+ * - Smart agent status tracking
+ * - Responsive and ergonomic design
  */
 
 import { useState, useEffect, useRef } from 'react'
@@ -39,7 +44,12 @@ import {
   FolderOpen,
   History,
   PanelLeftClose,
-  PanelLeft
+  PanelLeft,
+  Rocket,
+  Brain,
+  Zap,
+  Maximize2,
+  Minimize2
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
@@ -148,7 +158,7 @@ const AGENTS: AgentDef[] = [
   }
 ]
 
-type BMADMode = 'brainstorm' | 'running' | 'complete'
+type BMADMode = 'brainstorm' | 'running' | 'complete' | 'research'
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
@@ -206,6 +216,12 @@ export function BMADPage() {
   
   // Analyst panel state - Always visible by default with hide option
   const [showAnalystPanel, setShowAnalystPanel] = useState(true)
+  
+  // Pipeline view mode: compact or expanded
+  const [pipelineViewMode, setPipelineViewMode] = useState<'compact' | 'expanded'>('expanded')
+  
+  // Research mode integration - from global store
+  const { researchState } = useAppStore()
   
   // Recent projects state
   const [recentProjects, setRecentProjects] = useState<{ name: string; lastModified: string; goal: string }[]>([])
@@ -541,6 +557,13 @@ Répondez à ces questions ou posez-moi les vôtres !`,
   const isRunning = status?.running ?? false
   const completedAgents = status?.agents_completed ?? []
   const currentAgent = status?.current_agent
+  
+  // Auto-expand currently running agent
+  useEffect(() => {
+    if (currentAgent) {
+      setExpandedAgent(currentAgent)
+    }
+  }, [currentAgent])
 
   // Get agent status
   const getAgentStatus = (agentId: string): 'completed' | 'running' | 'pending' | 'error' => {
@@ -675,6 +698,12 @@ Répondez à ces questions ou posez-moi les vôtres !`,
                   {elapsedTime}
                 </span>
               )}
+              {currentAgent && (
+                <span className="flex items-center gap-1 text-freya-accent-cyan">
+                  <Brain className="w-4 h-4 animate-pulse" />
+                  {AGENTS.find(a => a.id === currentAgent)?.name} thinking...
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="text-freya-text-muted">
@@ -682,10 +711,41 @@ Répondez à ces questions ou posez-moi les vôtres !`,
               </span>
               <div className="w-32 h-2 bg-freya-bg-tertiary rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-freya-accent-blue transition-all"
+                  className="h-full bg-gradient-to-r from-freya-accent-blue to-freya-accent-cyan transition-all"
                   style={{ width: `${(completedAgents.length / AGENTS.length) * 100}%` }}
                 />
               </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Research Mode Integration Banner */}
+        {researchState?.isActive && researchState.phase === 'bmad' && !isRunning && (
+          <div className="mt-3 p-3 bg-freya-accent-green/10 border border-freya-accent-green/30 rounded-lg animate-fade-in">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-freya-accent-green/20 flex items-center justify-center">
+                  <Rocket className="w-5 h-5 text-freya-accent-green" />
+                </div>
+                <div>
+                  <div className="font-medium text-freya-accent-green">Research Brief Ready</div>
+                  <div className="text-sm text-freya-text-muted">
+                    A market research brief is ready from Research mode. Click to import and launch BMAD.
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (researchState.selectedIdea) {
+                    setGoal(researchState.selectedIdea)
+                    setMode('brainstorm')
+                  }
+                }}
+                className="btn-primary flex items-center gap-2"
+              >
+                <Zap className="w-4 h-4" />
+                Import Brief
+              </button>
             </div>
           </div>
         )}
@@ -939,13 +999,69 @@ Répondez à ces questions ou posez-moi les vôtres !`,
 
         {/* Left - Pipeline Visualization */}
         <div className={clsx(
-          'border-r border-freya-border bg-freya-bg-secondary p-4 overflow-y-auto',
-          mode === 'brainstorm' ? 'w-64' : 'w-80'
+          'border-r border-freya-border bg-freya-bg-secondary p-4 overflow-y-auto transition-all',
+          mode === 'brainstorm' ? 'w-64' : 'w-80',
+          pipelineViewMode === 'compact' && 'w-20'
         )}>
-          <h3 className="font-semibold text-freya-text-primary mb-4 flex items-center gap-2">
-            <GitBranch className="w-5 h-5 text-freya-accent-cyan" />
-            Agent Pipeline
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className={clsx(
+              "font-semibold text-freya-text-primary flex items-center gap-2",
+              pipelineViewMode === 'compact' && 'hidden'
+            )}>
+              <GitBranch className="w-5 h-5 text-freya-accent-cyan" />
+              Agent Pipeline
+            </h3>
+            <button
+              onClick={() => setPipelineViewMode(pipelineViewMode === 'compact' ? 'expanded' : 'compact')}
+              className="p-1.5 rounded hover:bg-freya-bg-tertiary"
+              title={pipelineViewMode === 'compact' ? 'Expand pipeline' : 'Collapse pipeline'}
+            >
+              {pipelineViewMode === 'compact' ? (
+                <Maximize2 className="w-4 h-4 text-freya-text-muted" />
+              ) : (
+                <Minimize2 className="w-4 h-4 text-freya-text-muted" />
+              )}
+            </button>
+          </div>
+          
+          {/* Quick Progress Overview (always visible) */}
+          {pipelineViewMode === 'compact' ? (
+            <div className="space-y-2">
+              {AGENTS.map((agent) => {
+                const Icon = agent.icon
+                const agentStatus = getAgentStatus(agent.id)
+                return (
+                  <div
+                    key={agent.id}
+                    className={clsx(
+                      'w-12 h-12 rounded-lg flex items-center justify-center transition-all cursor-pointer',
+                      agentStatus === 'completed' && 'bg-freya-accent-green/20 border border-freya-accent-green/50',
+                      agentStatus === 'running' && 'bg-freya-accent-blue/20 border border-freya-accent-blue/50 animate-pulse',
+                      agentStatus === 'error' && 'bg-freya-accent-red/20 border border-freya-accent-red/50',
+                      agentStatus === 'pending' && 'bg-freya-bg-tertiary border border-freya-border'
+                    )}
+                    onClick={() => {
+                      setPipelineViewMode('expanded')
+                      setExpandedAgent(agent.id)
+                    }}
+                    title={`${agent.name}: ${agentStatus}`}
+                  >
+                    {agentStatus === 'running' ? (
+                      <RefreshCw className="w-5 h-5 text-freya-accent-blue animate-spin" />
+                    ) : agentStatus === 'completed' ? (
+                      <CheckCircle2 className="w-5 h-5 text-freya-accent-green" />
+                    ) : agentStatus === 'error' ? (
+                      <AlertCircle className="w-5 h-5 text-freya-accent-red" />
+                    ) : (
+                      <Icon className={clsx('w-5 h-5', agent.color)} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            /* Full pipeline view */
+            <>
 
           <div className="space-y-2">
             {AGENTS.map((agent, index) => {
@@ -1072,6 +1188,8 @@ Répondez à ces questions ou posez-moi les vôtres !`,
                 </button>
               </div>
             </div>
+          )}
+            </>
           )}
         </div>
 
