@@ -84,7 +84,7 @@ export function ChatPage() {
   
   // Research mode state
   const [researchPhase, setResearchPhase] = useState<ResearchPhase>('idle')
-  const [researchAnalysis, setResearchAnalysis] = useState<string | null>(null)
+  const [, setResearchAnalysis] = useState<string | null>(null)
   const [researchSubMode, setResearchSubMode] = useState<ResearchSubMode>('assisted')
   const [autonomousRunning, setAutonomousRunning] = useState(false)
   const [autonomousIteration, setAutonomousIteration] = useState(0)
@@ -94,7 +94,9 @@ export function ChatPage() {
   const [exchangeModel2, setExchangeModel2] = useState<string>('')
   const [exchangeTopic, setExchangeTopic] = useState('')
   const [exchangeRunning, setExchangeRunning] = useState(false)
-  const [exchangeIterations, setExchangeIterations] = useState(5)
+  const [exchangeIterations, setExchangeIterations] = useState(10)
+  const [exchangeUnlimited, setExchangeUnlimited] = useState(false)
+  const exchangeStopRef = useRef(false)
   
   // Global store for research state persistence
   const { setResearchState } = useAppStore()
@@ -147,15 +149,22 @@ export function ChatPage() {
       const conv = conversations.find(c => c.id === currentConversationId)
       if (conv) {
         setMessages(conv.messages)
+      } else {
+        // Conversation was deleted, reset state
+        setMessages([])
+        setCurrentConversationId(null)
+        localStorage.removeItem(STORAGE_KEYS.CURRENT_CONVERSATION)
       }
+    } else {
+      // No current conversation, ensure messages are empty
+      setMessages([])
     }
   }, [currentConversationId, conversations])
   
   // Save conversations to localStorage when they change
   useEffect(() => {
-    if (conversations.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(conversations))
-    }
+    // Always persist, even if empty (to properly handle deletions)
+    localStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(conversations))
   }, [conversations])
   
   // Save current conversation ID
@@ -210,15 +219,21 @@ export function ChatPage() {
     setShowHistory(false)
   }
   
-  // Delete a conversation - FIXED: properly clear localStorage
+  // Delete a conversation - FIXED: properly clear localStorage and state
   const deleteConversation = (convId: string) => {
+    // First check if we need to clear current conversation
+    const isCurrent = currentConversationId === convId
+    
+    // Update conversations list
     setConversations(prev => {
       const filtered = prev.filter(c => c.id !== convId)
       // Immediately persist the deletion to localStorage
       localStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(filtered))
       return filtered
     })
-    if (currentConversationId === convId) {
+    
+    // If deleting current conversation, reset to clean state
+    if (isCurrent) {
       setMessages([])
       setCurrentConversationId(null)
       localStorage.removeItem(STORAGE_KEYS.CURRENT_CONVERSATION)
@@ -768,7 +783,9 @@ Fournis une analyse structurée et actionnable.`
         max_tokens: 2048,
       })
       
-      setResearchAnalysis(analysisData.content)
+      // Store the analysis for briefing phase
+      const analysisContentForBrief = analysisData.content
+      setResearchAnalysis(analysisContentForBrief)
       
       const analysisResult: Message = {
         id: `research-result-${Date.now()}`,
@@ -784,37 +801,29 @@ Fournis une analyse structurée et actionnable.`
         const filtered = prev.filter(m => m.id !== analysisMsgId)
         return [...filtered, analysisResult]
       })
-    } catch (e) {
-      console.error('[Research] Analysis error:', e)
-      setMessages(prev => prev.map(m => 
-        m.id === analysisMsgId 
-          ? { ...m, content: `❌ **Phase 2/4: Analyse échouée**\n\n${e instanceof Error ? e.message : 'Erreur inconnue'}` }
-          : m
-      ))
-    }
-    
-    // Small delay between phases
-    await new Promise(resolve => setTimeout(resolve, 100))
-    
-    // Phase 3: Briefing for BMAD Analyst
-    console.log('[Research] Phase 3: Starting briefing')
-    setResearchPhase('briefing')
-    const briefingMsgId = `research-briefing-${Date.now()}`
-    const briefingMsg: Message = {
-      id: briefingMsgId,
-      role: 'system',
-      content: `📋 **Phase 3/4: Préparation du Brief BMAD**\n\nPréparation du brief pour l'Analyste BMAD...\n\n⏳ Génération en cours...`,
-      timestamp: new Date(),
-    }
-    setMessages(prev => [...prev, briefingMsg])
-    
-    // Small delay to ensure UI updates
-    await new Promise(resolve => setTimeout(resolve, 100))
-    
-    try {
-      const briefPrompt = `Basé sur cette analyse de marché:
+      
+      // Small delay between phases
+      await new Promise(resolve => setTimeout(resolve, 300))
+      
+      // Phase 3: Briefing for BMAD Analyst (inside the try block to use analysisContentForBrief)
+      console.log('[Research] Phase 3: Starting briefing')
+      setResearchPhase('briefing')
+      const briefingMsgId = `research-briefing-${Date.now()}`
+      const briefingMsg: Message = {
+        id: briefingMsgId,
+        role: 'system',
+        content: `📋 **Phase 3/4: Préparation du Brief BMAD**\n\n⏳ Génération en cours...`,
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, briefingMsg])
+      
+      // Small delay to ensure UI updates
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      try {
+        const briefPrompt = `Basé sur cette analyse de marché:
 
-${researchAnalysis || 'Analyse non disponible'}
+${analysisContentForBrief}
 
 Prépare un brief structuré pour l'Analyste BMAD qui va lancer le développement. Le brief doit inclure:
 
@@ -828,42 +837,56 @@ Prépare un brief structuré pour l'Analyste BMAD qui va lancer le développemen
 
 Format: Brief concis et actionnable pour démarrer un projet BMAD.`
 
-      const briefData = await api.generateChat({
-        message: briefPrompt,
-        system_prompt: 'Tu es un consultant stratégique qui prépare des briefs projets clairs et actionnables.',
-        max_tokens: 1500,
-      })
-      
-      console.log('[Research] Phase 4: BMAD ready')
-      
-      const briefResult: Message = {
-        id: `research-brief-${Date.now()}`,
-        role: 'synthesis',
-        content: `## 📋 Brief Projet BMAD\n\n${briefData.content}\n\n---\n\n🚀 **Prêt à lancer le projet BMAD?** Cliquez sur "Lancer BMAD" pour transférer ce brief à l'équipe BMAD.`,
-        timestamp: new Date(),
-        model: briefData.model,
-        agentName: 'Strategic Brief',
+        const briefData = await api.generateChat({
+          message: briefPrompt,
+          system_prompt: 'Tu es un consultant stratégique qui prépare des briefs projets clairs et actionnables.',
+          max_tokens: 1500,
+        })
+        
+        console.log('[Research] Phase 4: BMAD ready')
+        
+        const briefResult: Message = {
+          id: `research-brief-${Date.now()}`,
+          role: 'synthesis',
+          content: `## 📋 Brief Projet BMAD\n\n${briefData.content}\n\n---\n\n🚀 **Prêt à lancer le projet BMAD?** Cliquez sur "Lancer BMAD" pour transférer ce brief à l'équipe BMAD.`,
+          timestamp: new Date(),
+          model: briefData.model,
+          agentName: 'Strategic Brief',
+        }
+        
+        // Update state for BMAD handoff
+        setResearchState({
+          isActive: true,
+          phase: 'bmad_ready' as ResearchPhase,
+          searchResults: allSearchResults,
+          analysisReport: analysisContentForBrief,
+          selectedIdea: briefData.content,
+        })
+        
+        setMessages(prev => {
+          const filtered = prev.filter(m => m.id !== briefingMsgId)
+          const newMsgs = [...filtered, briefResult]
+          updateConversation(newMsgs)
+          return newMsgs
+        })
+        
+        setResearchPhase('bmad_ready')
+      } catch (briefError) {
+        console.error('[Research] Briefing error:', briefError)
+        setMessages(prev => prev.map(m => 
+          m.id === briefingMsgId 
+            ? { ...m, content: `❌ **Phase 3/4: Brief échoué**\n\n${briefError instanceof Error ? briefError.message : 'Erreur'}` }
+            : m
+        ))
       }
       
-      // Update state for BMAD handoff
-      setResearchState({
-        isActive: true,
-        phase: 'bmad_ready' as ResearchPhase,
-        searchResults: allSearchResults,
-        analysisReport: researchAnalysis,
-        selectedIdea: briefData.content,
-      })
-      
-      setMessages(prev => {
-        const filtered = prev.filter(m => m.id !== briefingMsgId)
-        const newMsgs = [...filtered, briefResult]
-        updateConversation(newMsgs)
-        return newMsgs
-      })
-      
-      setResearchPhase('bmad_ready')
     } catch (e) {
-      console.error('[Research] Briefing error:', e)
+      console.error('[Research] Analysis error:', e)
+      setMessages(prev => prev.map(m => 
+        m.id === analysisMsgId 
+          ? { ...m, content: `❌ **Phase 2/4: Analyse échouée**\n\n${e instanceof Error ? e.message : 'Erreur inconnue'}` }
+          : m
+      ))
     }
     
     setIsProcessingMulti(false)
@@ -993,13 +1016,13 @@ Create a structured brief with:
     setResearchPhase('idle')
   }
   
-  // Exchange mode: Two AIs discuss a topic autonomously - FIXED: proper async loop
+  // Exchange mode: Two AIs have natural conversation - IMPROVED with unlimited mode
   const handleExchangeChat = async () => {
     if (!exchangeModel1 || !exchangeModel2 || !exchangeTopic) {
       const errorMsg: Message = {
         id: `exchange-error-${Date.now()}`,
         role: 'system',
-        content: `⚠️ **Configuration requise:** Veuillez sélectionner deux modèles différents et entrer un sujet de discussion.`,
+        content: `⚠️ Sélectionnez deux modèles et entrez un sujet.`,
         timestamp: new Date(),
       }
       setMessages(prev => [...prev, errorMsg])
@@ -1010,112 +1033,135 @@ Create a structured brief with:
       const errorMsg: Message = {
         id: `exchange-error-${Date.now()}`,
         role: 'system',
-        content: `⚠️ **Modèles identiques:** Veuillez sélectionner deux modèles différents pour l'échange.`,
+        content: `⚠️ Sélectionnez deux modèles différents.`,
         timestamp: new Date(),
       }
       setMessages(prev => [...prev, errorMsg])
       return
     }
     
+    exchangeStopRef.current = false
     setExchangeRunning(true)
     
-    // Add initial message
+    const model1 = exchangeModel1
+    const model2 = exchangeModel2
+    const topic = exchangeTopic
+    const maxIterations = exchangeUnlimited ? 999 : exchangeIterations
+    
+    // Conversation history for context
+    const conversationHistory: { speaker: string; content: string }[] = []
+    
+    // Start message (compact)
     const startMsg: Message = {
       id: `exchange-start-${Date.now()}`,
       role: 'system',
-      content: `🔄 **AI Exchange Started**\n\n**Topic:** ${exchangeTopic}\n**AI 1:** ${exchangeModel1}\n**AI 2:** ${exchangeModel2}\n**Iterations:** ${exchangeIterations}`,
+      content: `💬 **${model1.split(':')[0]}** ↔ **${model2.split(':')[0]}** — "${topic}"${exchangeUnlimited ? ' (illimité)' : ''}`,
       timestamp: new Date(),
     }
     setMessages(prev => [...prev, startMsg])
     
-    let lastResponse = exchangeTopic
-    let isRunning = true
-    const iterations = exchangeIterations
-    const model1 = exchangeModel1
-    const model2 = exchangeModel2
-    const topic = exchangeTopic
-    
-    // Use a local variable to track running state since React state updates are async
     const runExchange = async () => {
-      for (let i = 0; i < iterations && isRunning; i++) {
-        const currentModel = i % 2 === 0 ? model1 : model2
-        const otherModel = i % 2 === 0 ? model2 : model1
+      let currentExchange = 0
+      
+      while (currentExchange < maxIterations && !exchangeStopRef.current) {
+        const isModel1Turn = currentExchange % 2 === 0
+        const currentModel = isModel1Turn ? model1 : model2
+        const otherModel = isModel1Turn ? model2 : model1
+        const modelShortName = currentModel.split(':')[0]
         
-        // Add progress indicator
-        const progressMsg: Message = {
-          id: `exchange-progress-${i}-${Date.now()}`,
+        // Discreet progress indicator (small, will be replaced)
+        const progressId = `exchange-progress-${Date.now()}`
+        setMessages(prev => [...prev, {
+          id: progressId,
           role: 'system',
-          content: `💬 Exchange ${i + 1}/${iterations}: **${currentModel.split(':')[0]}** is thinking...`,
+          content: `_${modelShortName} réfléchit..._`,
           timestamp: new Date(),
-        }
-        setMessages(prev => [...prev, progressMsg])
+        }])
         
         try {
-          const prompt = i === 0 
-            ? `You are having a discussion about: "${topic}". Start the conversation with your perspective. Be insightful and engaging.`
-            : `Your conversation partner (${otherModel}) said:\n\n"${lastResponse}"\n\nContinue the discussion. Add new insights, challenge their points constructively, or build upon them. Be concise but insightful.`
-          
-          console.log(`[Exchange] Iteration ${i + 1}: querying ${currentModel}`)
+          // Build natural conversation context
+          let prompt: string
+          if (currentExchange === 0) {
+            prompt = `Tu participes à une discussion sur: "${topic}".\n\nCommence la conversation avec ton point de vue. Sois naturel, engageant et direct. Pas de formalités inutiles.`
+          } else {
+            // Include recent conversation history for context
+            const recentHistory = conversationHistory.slice(-6).map(h => 
+              `**${h.speaker}:** ${h.content}`
+            ).join('\n\n')
+            
+            prompt = `Tu es en pleine discussion avec ${otherModel.split(':')[0]} sur "${topic}".\n\n**Conversation récente:**\n${recentHistory}\n\n**Instructions:** Réponds naturellement comme dans une vraie conversation. Tu peux:\n- Rebondir sur ce qui a été dit\n- Apporter de nouvelles idées\n- Poser des questions\n- Exprimer un désaccord constructif\n- Approfondir un point intéressant\n\nSois concis (2-4 phrases max) mais pertinent.`
+          }
           
           const response = await api.generateChat({
             message: prompt,
             model: currentModel,
-            system_prompt: `You are engaged in a thoughtful intellectual discussion. Be concise but insightful. Respond naturally as if in conversation. This is exchange ${i + 1}/${iterations}.`,
-            max_tokens: 512,
+            system_prompt: `Tu es ${modelShortName}, un participant engagé dans une conversation naturelle. Réponds de manière authentique et conversationnelle. Évite les phrases génériques. Sois direct et intéressant.`,
+            max_tokens: 400,
           })
           
-          lastResponse = response.content
+          // Add to conversation history
+          conversationHistory.push({
+            speaker: modelShortName,
+            content: response.content
+          })
           
-          // Remove progress indicator and add actual response
+          // Replace progress with actual response
           setMessages(prev => {
-            const filtered = prev.filter(m => m.id !== progressMsg.id)
+            const filtered = prev.filter(m => m.id !== progressId)
             const agentMsg: Message = {
-              id: `exchange-${i}-${Date.now()}`,
+              id: `exchange-${currentExchange}-${Date.now()}`,
               role: 'agent',
               content: response.content,
               timestamp: new Date(),
               model: currentModel,
-              agentName: `${currentModel.split(':')[0]} (#${i + 1})`,
+              agentName: modelShortName,
               duration_ms: response.duration_ms,
             }
             return [...filtered, agentMsg]
           })
           
-          // Small delay between exchanges for readability
-          await new Promise(resolve => setTimeout(resolve, 1000))
+          currentExchange++
+          
+          // Small delay between exchanges
+          await new Promise(resolve => setTimeout(resolve, 800))
           
         } catch (e) {
-          console.error(`[Exchange] Error at iteration ${i}:`, e)
+          console.error(`[Exchange] Error:`, e)
           setMessages(prev => {
-            const filtered = prev.filter(m => m.id !== progressMsg.id)
-            const errorMsg: Message = {
+            const filtered = prev.filter(m => m.id !== progressId)
+            return [...filtered, {
               id: `exchange-error-${Date.now()}`,
               role: 'system',
-              content: `⚠️ Exchange interrupted at iteration ${i + 1}: ${e instanceof Error ? e.message : 'Unknown error'}`,
+              content: `⚠️ Erreur: ${e instanceof Error ? e.message : 'Erreur inconnue'}`,
               timestamp: new Date(),
-            }
-            return [...filtered, errorMsg]
+            }]
           })
-          isRunning = false
           break
         }
       }
       
-      // Add summary
-      const endMsg: Message = {
+      // End message
+      const wasStoppedManually = exchangeStopRef.current
+      setMessages(prev => [...prev, {
         id: `exchange-end-${Date.now()}`,
         role: 'synthesis',
-        content: `## 📝 Exchange Complete\n\nThe discussion between **${model1}** and **${model2}** on "${topic}" has concluded after ${iterations} exchanges. Review the insights above.`,
+        content: wasStoppedManually 
+          ? `✋ **Conversation arrêtée** après ${conversationHistory.length} échanges.`
+          : `✅ **Conversation terminée** — ${conversationHistory.length} échanges entre ${model1.split(':')[0]} et ${model2.split(':')[0]}.`,
         timestamp: new Date(),
-        agentName: 'Exchange Summary',
-      }
-      setMessages(prev => [...prev, endMsg])
+        agentName: 'Fin',
+      }])
       
       setExchangeRunning(false)
     }
     
-    // Start the exchange
     runExchange()
+  }
+  
+  // Stop exchange
+  const stopExchange = () => {
+    exchangeStopRef.current = true
+    setExchangeRunning(false)
   }
 
   // Search mutation
@@ -1790,67 +1836,76 @@ Create a structured brief with:
         {/* Exchange Mode Settings */}
         {chatMode === 'exchange' && (
           <div className="p-3 border-b border-freya-border bg-freya-accent-red/5">
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-freya-accent-red" />
-                <span className="text-sm font-medium text-freya-text-primary">AI Exchange</span>
-              </div>
-              
+            <div className="flex items-center gap-3 flex-wrap">
               {/* Model selectors */}
-              <div className="flex items-center gap-2">
-                <select
-                  value={exchangeModel1}
-                  onChange={(e) => setExchangeModel1(e.target.value)}
-                  className="input py-1 text-xs w-32"
-                >
-                  <option value="">AI 1...</option>
-                  {models?.map(m => (
-                    <option key={m.name} value={m.name}>{m.name}</option>
-                  ))}
-                </select>
-                <span className="text-freya-text-muted">↔</span>
-                <select
-                  value={exchangeModel2}
-                  onChange={(e) => setExchangeModel2(e.target.value)}
-                  className="input py-1 text-xs w-32"
-                >
-                  <option value="">AI 2...</option>
-                  {models?.map(m => (
-                    <option key={m.name} value={m.name}>{m.name}</option>
-                  ))}
-                </select>
-              </div>
+              <select
+                value={exchangeModel1}
+                onChange={(e) => setExchangeModel1(e.target.value)}
+                className="input py-1.5 text-sm w-36"
+                disabled={exchangeRunning}
+              >
+                <option value="">IA 1...</option>
+                {models?.map(m => (
+                  <option key={m.name} value={m.name}>{m.name.split(':')[0]}</option>
+                ))}
+              </select>
+              <span className="text-freya-accent-red font-bold">↔</span>
+              <select
+                value={exchangeModel2}
+                onChange={(e) => setExchangeModel2(e.target.value)}
+                className="input py-1.5 text-sm w-36"
+                disabled={exchangeRunning}
+              >
+                <option value="">IA 2...</option>
+                {models?.map(m => (
+                  <option key={m.name} value={m.name}>{m.name.split(':')[0]}</option>
+                ))}
+              </select>
               
-              {/* Iterations */}
+              <div className="h-4 w-px bg-freya-border" />
+              
+              {/* Iterations or Unlimited */}
               <div className="flex items-center gap-2">
-                <span className="text-xs text-freya-text-muted">Exchanges:</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="20"
-                  value={exchangeIterations}
-                  onChange={(e) => setExchangeIterations(parseInt(e.target.value) || 5)}
-                  className="input py-1 text-xs w-16"
-                />
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={exchangeUnlimited}
+                    onChange={(e) => setExchangeUnlimited(e.target.checked)}
+                    className="w-4 h-4 rounded border-freya-border"
+                    disabled={exchangeRunning}
+                  />
+                  <span className="text-xs text-freya-text-secondary">Illimité</span>
+                </label>
+                {!exchangeUnlimited && (
+                  <input
+                    type="number"
+                    min="2"
+                    max="50"
+                    value={exchangeIterations}
+                    onChange={(e) => setExchangeIterations(Math.max(2, parseInt(e.target.value) || 10))}
+                    className="input py-1 text-xs w-14 text-center"
+                    disabled={exchangeRunning}
+                  />
+                )}
               </div>
               
               {/* Control */}
               {exchangeRunning ? (
                 <button
-                  onClick={() => setExchangeRunning(false)}
-                  className="btn-danger text-xs px-2 py-1 flex items-center gap-1"
+                  onClick={stopExchange}
+                  className="btn-danger text-sm px-3 py-1.5 flex items-center gap-1.5"
                 >
-                  <StopCircle className="w-3 h-3" />
-                  Stop
+                  <StopCircle className="w-4 h-4" />
+                  Arrêter
                 </button>
               ) : (
                 <button
                   onClick={() => handleExchangeChat()}
                   disabled={!exchangeModel1 || !exchangeModel2 || !exchangeTopic || exchangeModel1 === exchangeModel2}
-                  className="btn-primary text-xs px-2 py-1 flex items-center gap-1"
+                  className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1.5"
                 >
-                  <MessageSquare className="w-3 h-3" />
-                  Start Exchange
+                  <MessageSquare className="w-4 h-4" />
+                  Démarrer
                 </button>
               )}
             </div>
@@ -1861,8 +1916,9 @@ Create a structured brief with:
                 type="text"
                 value={exchangeTopic}
                 onChange={(e) => setExchangeTopic(e.target.value)}
-                placeholder="Topic for AI discussion... (e.g., 'Best architecture for a social media app')"
+                placeholder="Sujet de la conversation... (ex: 'Quel est le meilleur framework frontend en 2025?')"
                 className="input text-sm w-full"
+                disabled={exchangeRunning}
               />
             </div>
           </div>
