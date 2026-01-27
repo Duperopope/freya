@@ -662,6 +662,23 @@ Répondez à ces questions ou posez-moi les vôtres !`,
   const completedAgents = status?.agents_completed ?? []
   const currentAgent = status?.current_agent
   
+  // Detect validation cycle from logs
+  const currentCycle = (() => {
+    const logs = bmadProgress?.logs || agentLogs
+    const cycleLog = [...logs].reverse().find(log => 
+      log.message?.includes('Cycle de validation')
+    )
+    if (cycleLog) {
+      const match = cycleLog.message.match(/Cycle de validation (\d+)/)
+      return match ? parseInt(match[1]) : 0
+    }
+    return 0
+  })()
+  
+  // Track which agents need to be re-run in current cycle
+  const validationAgents = ['dev', 'qa', 'runner']
+  const isInValidationLoop = currentCycle > 0
+  
   // Auto-expand currently running agent
   useEffect(() => {
     if (currentAgent) {
@@ -669,8 +686,36 @@ Répondez à ces questions ou posez-moi les vôtres !`,
     }
   }, [currentAgent])
 
-  // Get agent status
-  const getAgentStatus = (agentId: string): 'completed' | 'running' | 'pending' | 'error' => {
+  // Get agent status with validation cycle awareness
+  const getAgentStatus = (agentId: string): 'completed' | 'running' | 'pending' | 'error' | 'retry' => {
+    // If in validation loop and this is a validation agent
+    if (isInValidationLoop && validationAgents.includes(agentId)) {
+      // Current agent is running
+      if (currentAgent === agentId) return 'running'
+      
+      // Get the index of agents to determine order
+      const currentAgentIdx = validationAgents.indexOf(currentAgent || '')
+      const thisAgentIdx = validationAgents.indexOf(agentId)
+      
+      // If current agent is after this one, this one is done for this cycle
+      if (currentAgentIdx > thisAgentIdx) {
+        return 'completed'
+      }
+      
+      // If current agent is before this one, this one is pending retry
+      if (currentAgentIdx >= 0 && currentAgentIdx < thisAgentIdx) {
+        return 'retry' // Orange - waiting to be re-run
+      }
+      
+      // If no current agent but we're in validation loop, check if completed
+      if (!currentAgent && completedAgents.filter(a => a === agentId).length > 0) {
+        return 'completed'
+      }
+      
+      return 'retry'
+    }
+    
+    // Normal flow for design agents
     if (completedAgents.includes(agentId)) return 'completed'
     if (currentAgent === agentId) return 'running'
     if (pipelineErrors.some(e => e.agent === agentId)) return 'error'
@@ -810,14 +855,20 @@ Répondez à ces questions ou posez-moi les vôtres !`,
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
+              {currentCycle > 0 && (
+                <span className="flex items-center gap-1 text-orange-500 font-medium">
+                  <Repeat className="w-4 h-4" />
+                  Cycle {currentCycle}
+                </span>
+              )}
               <span className="text-freya-text-muted">
-                {completedAgents.length}/{AGENTS.length} agents completed
+                {new Set(completedAgents).size}/{AGENTS.length} agents
               </span>
               <div className="w-32 h-2 bg-freya-bg-tertiary rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-gradient-to-r from-freya-accent-blue to-freya-accent-cyan transition-all"
-                  style={{ width: `${(completedAgents.length / AGENTS.length) * 100}%` }}
+                  style={{ width: `${(new Set(completedAgents).size / AGENTS.length) * 100}%` }}
                 />
               </div>
             </div>
@@ -1231,13 +1282,14 @@ Répondez à ces questions ou posez-moi les vôtres !`,
                       agentStatus === 'completed' && 'bg-freya-accent-green/20 border border-freya-accent-green/50',
                       agentStatus === 'running' && 'bg-freya-accent-blue/20 border border-freya-accent-blue/50 animate-pulse',
                       agentStatus === 'error' && 'bg-freya-accent-red/20 border border-freya-accent-red/50',
+                      agentStatus === 'retry' && 'bg-orange-500/20 border border-orange-500/50',
                       agentStatus === 'pending' && 'bg-freya-bg-tertiary border border-freya-border'
                     )}
                     onClick={() => {
                       setPipelineViewMode('expanded')
                       setExpandedAgent(agent.id)
                     }}
-                    title={`${agent.name}: ${agentStatus}`}
+                    title={`${agent.name}: ${agentStatus}${currentCycle > 0 ? ` (cycle ${currentCycle})` : ''}`}
                   >
                     {agentStatus === 'running' ? (
                       <RefreshCw className="w-5 h-5 text-freya-accent-blue animate-spin" />
@@ -1245,6 +1297,8 @@ Répondez à ces questions ou posez-moi les vôtres !`,
                       <CheckCircle2 className="w-5 h-5 text-freya-accent-green" />
                     ) : agentStatus === 'error' ? (
                       <AlertCircle className="w-5 h-5 text-freya-accent-red" />
+                    ) : agentStatus === 'retry' ? (
+                      <Repeat className="w-5 h-5 text-orange-500" />
                     ) : (
                       <Icon className={clsx('w-5 h-5', agent.color)} />
                     )}
@@ -1273,6 +1327,7 @@ Répondez à ces questions ou posez-moi les vôtres !`,
                       agentStatus === 'completed' && 'bg-freya-accent-green/10 border-freya-accent-green/30',
                       agentStatus === 'running' && 'bg-freya-accent-blue/10 border-freya-accent-blue/30',
                       agentStatus === 'error' && 'bg-freya-accent-red/10 border-freya-accent-red/30',
+                      agentStatus === 'retry' && 'bg-orange-500/10 border-orange-500/30',
                       agentStatus === 'pending' && 'bg-freya-bg-primary border-freya-border opacity-60'
                     )}
                   >
@@ -1283,6 +1338,7 @@ Répondez à ces questions ou posez-moi les vôtres !`,
                         agentStatus === 'completed' && 'bg-freya-accent-green/20',
                         agentStatus === 'running' && 'bg-freya-accent-blue/20',
                         agentStatus === 'error' && 'bg-freya-accent-red/20',
+                        agentStatus === 'retry' && 'bg-orange-500/20',
                         agentStatus === 'pending' && 'bg-freya-bg-tertiary'
                       )}>
                         {agentStatus === 'running' ? (
@@ -1291,6 +1347,8 @@ Répondez à ces questions ou posez-moi les vôtres !`,
                           <CheckCircle2 className="w-5 h-5 text-freya-accent-green" />
                         ) : agentStatus === 'error' ? (
                           <AlertCircle className="w-5 h-5 text-freya-accent-red" />
+                        ) : agentStatus === 'retry' ? (
+                          <Repeat className="w-5 h-5 text-orange-500" />
                         ) : (
                           <Icon className={clsx('w-5 h-5', agent.color)} />
                         )}
