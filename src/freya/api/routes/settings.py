@@ -288,7 +288,7 @@ async def get_env_vars() -> dict[str, str | None]:
 async def get_version() -> dict[str, str]:
     """Get Freya version information."""
     return {
-        "version": "2.3.1",
+        "version": "2.3.5",
         "api_version": "2.3",
         "python_version": f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}",
     }

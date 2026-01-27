@@ -321,8 +321,9 @@ export async function getFileTree(maxDepth = 3): Promise<Record<string, unknown>
   return handleResponse(res)
 }
 
-export async function deleteFile(path: string): Promise<{ deleted: boolean }> {
-  const res = await fetch(`${API_BASE}/files/?path=${encodeURIComponent(path)}`, {
+export async function deleteFile(path: string, recursive = false): Promise<{ deleted: boolean }> {
+  const url = `${API_BASE}/files/?path=${encodeURIComponent(path)}${recursive ? '&recursive=true' : ''}`
+  const res = await fetch(url, {
     method: 'DELETE',
   })
   return handleResponse(res)

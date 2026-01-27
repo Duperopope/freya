@@ -238,8 +238,10 @@ async def write_file(request: Request, body: WriteRequest) -> dict[str, Any]:
 
 
 @router.delete("/")
-async def delete_file(request: Request, path: str) -> dict[str, Any]:
-    """Delete a file (not directories)."""
+async def delete_file(request: Request, path: str, recursive: bool = False) -> dict[str, Any]:
+    """Delete a file or directory (with optional recursive deletion)."""
+    import shutil
+    
     state = request.app.state.freya
     
     if not state.ready:
@@ -251,12 +253,30 @@ async def delete_file(request: Request, path: str) -> dict[str, Any]:
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     
-    if file_path.is_dir():
-        raise HTTPException(status_code=400, detail="Cannot delete directories via this endpoint")
+    # Security: prevent deleting protected directories
+    protected_names = {".git", ".venv", "node_modules", "__pycache__", "dist", "build"}
+    if file_path.name in protected_names:
+        raise HTTPException(status_code=403, detail=f"Cannot delete protected directory: {file_path.name}")
     
     try:
-        file_path.unlink()
-        return {"deleted": True, "path": path}
+        if file_path.is_dir():
+            if recursive:
+                shutil.rmtree(file_path)
+            else:
+                # Try to remove empty directory
+                try:
+                    file_path.rmdir()
+                except OSError:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Directory is not empty. Use recursive=true to delete with contents."
+                    )
+        else:
+            file_path.unlink()
+        
+        return {"deleted": True, "path": path, "was_directory": file_path.is_dir() if file_path.exists() else False}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete: {e}")
 

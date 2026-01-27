@@ -1,20 +1,33 @@
-import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Copy, Check, Settings2, Shield, Globe, FileText, X, Paperclip, Image, Plus, Edit2, Trash2, RotateCcw, StopCircle } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Send, Loader2, Copy, Check, Settings2, Shield, Globe, FileText, X, Paperclip, Image, Plus, Edit2, Trash2, RotateCcw, StopCircle, Users, Brain, MessageSquare, History } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { clsx } from 'clsx'
 import * as api from '../../lib/api'
 
+// Chat modes
+type ChatMode = 'standard' | 'multi-agent' | 'reflection'
+
 interface Message {
   id: string
-  role: 'user' | 'assistant' | 'system' | 'tool'
+  role: 'user' | 'assistant' | 'system' | 'tool' | 'synthesis'
   content: string
   timestamp: Date
   model?: string
   duration_ms?: number
   attachments?: AttachedFile[]
   searchResults?: api.SearchResult[]
+  agentName?: string // For multi-agent mode
+  isReflection?: boolean // For reflection mode
+}
+
+interface Conversation {
+  id: string
+  title: string
+  messages: Message[]
+  createdAt: Date
+  updatedAt: Date
 }
 
 interface AttachedFile {
@@ -25,7 +38,20 @@ interface AttachedFile {
   preview?: string
 }
 
+// Storage keys
+const STORAGE_KEYS = {
+  CONVERSATIONS: 'freya_chat_conversations',
+  CURRENT_CONVERSATION: 'freya_chat_current',
+  CHAT_SETTINGS: 'freya_chat_settings',
+}
+
 export function ChatPage() {
+  // Conversation management
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
+  
+  // Current messages (synced with current conversation)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [selectedHat, setSelectedHat] = useState<string>('')
@@ -40,10 +66,132 @@ export function ChatPage() {
   const [showCreateHat, setShowCreateHat] = useState(false)
   const [newHatName, setNewHatName] = useState('')
   const [newHatDescription, setNewHatDescription] = useState('')
+  
+  // Advanced chat modes
+  const [chatMode, setChatMode] = useState<ChatMode>('standard')
+  const [selectedModels, setSelectedModels] = useState<string[]>([]) // For multi-agent mode
+  const [reflectionDepth, setReflectionDepth] = useState(2) // For reflection mode
+  const [isProcessingMulti, setIsProcessingMulti] = useState(false)
+  
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  
+  // Load conversations from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.CONVERSATIONS)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        // Convert date strings back to Date objects
+        const convs = parsed.map((c: any) => ({
+          ...c,
+          createdAt: new Date(c.createdAt),
+          updatedAt: new Date(c.updatedAt),
+          messages: c.messages.map((m: any) => ({
+            ...m,
+            timestamp: new Date(m.timestamp)
+          }))
+        }))
+        setConversations(convs)
+      }
+      
+      const currentId = localStorage.getItem(STORAGE_KEYS.CURRENT_CONVERSATION)
+      if (currentId) {
+        setCurrentConversationId(currentId)
+      }
+      
+      // Load chat settings
+      const settings = localStorage.getItem(STORAGE_KEYS.CHAT_SETTINGS)
+      if (settings) {
+        const { mode, models, depth } = JSON.parse(settings)
+        if (mode) setChatMode(mode)
+        if (models) setSelectedModels(models)
+        if (depth) setReflectionDepth(depth)
+      }
+    } catch (e) {
+      console.error('Failed to load chat history:', e)
+    }
+  }, [])
+  
+  // Load current conversation messages when conversation changes
+  useEffect(() => {
+    if (currentConversationId) {
+      const conv = conversations.find(c => c.id === currentConversationId)
+      if (conv) {
+        setMessages(conv.messages)
+      }
+    }
+  }, [currentConversationId, conversations])
+  
+  // Save conversations to localStorage when they change
+  useEffect(() => {
+    if (conversations.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(conversations))
+    }
+  }, [conversations])
+  
+  // Save current conversation ID
+  useEffect(() => {
+    if (currentConversationId) {
+      localStorage.setItem(STORAGE_KEYS.CURRENT_CONVERSATION, currentConversationId)
+    }
+  }, [currentConversationId])
+  
+  // Save chat settings
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.CHAT_SETTINGS, JSON.stringify({
+      mode: chatMode,
+      models: selectedModels,
+      depth: reflectionDepth
+    }))
+  }, [chatMode, selectedModels, reflectionDepth])
+  
+  // Update conversation when messages change
+  const updateConversation = useCallback((newMessages: Message[]) => {
+    if (!currentConversationId) {
+      // Create new conversation
+      const newConv: Conversation = {
+        id: Date.now().toString(),
+        title: newMessages[0]?.content.slice(0, 50) || 'New Conversation',
+        messages: newMessages,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+      setConversations(prev => [newConv, ...prev])
+      setCurrentConversationId(newConv.id)
+    } else {
+      // Update existing conversation
+      setConversations(prev => prev.map(c => 
+        c.id === currentConversationId 
+          ? { ...c, messages: newMessages, updatedAt: new Date() }
+          : c
+      ))
+    }
+  }, [currentConversationId])
+  
+  // Create new conversation
+  const createNewConversation = () => {
+    setMessages([])
+    setCurrentConversationId(null)
+    setShowHistory(false)
+  }
+  
+  // Switch to a conversation
+  const switchConversation = (convId: string) => {
+    setCurrentConversationId(convId)
+    setShowHistory(false)
+  }
+  
+  // Delete a conversation
+  const deleteConversation = (convId: string) => {
+    setConversations(prev => prev.filter(c => c.id !== convId))
+    if (currentConversationId === convId) {
+      setMessages([])
+      setCurrentConversationId(null)
+    }
+  }
 
   // Fetch available hats
   const { data: hats } = useQuery({
@@ -70,7 +218,11 @@ export function ChatPage() {
         duration_ms: data.duration_ms,
         searchResults: data.search_results,
       }
-      setMessages(prev => [...prev, assistantMessage])
+      setMessages(prev => {
+        const newMessages = [...prev, assistantMessage]
+        updateConversation(newMessages)
+        return newMessages
+      })
     },
     onError: (error) => {
       const errorMessage: Message = {
@@ -79,9 +231,216 @@ export function ChatPage() {
         content: `Error: ${error.message}`,
         timestamp: new Date(),
       }
-      setMessages(prev => [...prev, errorMessage])
+      setMessages(prev => {
+        const newMessages = [...prev, errorMessage]
+        updateConversation(newMessages)
+        return newMessages
+      })
     },
   })
+  
+  // Multi-agent mode: query multiple models and synthesize
+  const handleMultiAgentChat = async (text: string, messageContent: string) => {
+    if (selectedModels.length < 2) {
+      alert('Please select at least 2 models for Multi-Agent mode')
+      return
+    }
+    
+    setIsProcessingMulti(true)
+    const responses: { model: string; content: string }[] = []
+    
+    // Add user message
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: text,
+      timestamp: new Date(),
+      attachments: attachedFiles.length > 0 ? [...attachedFiles] : undefined,
+    }
+    
+    setMessages(prev => {
+      const newMessages = [...prev, userMessage]
+      updateConversation(newMessages)
+      return newMessages
+    })
+    setInput('')
+    setAttachedFiles([])
+    
+    // Query each model
+    for (const model of selectedModels) {
+      try {
+        const data = await api.generateChat({
+          message: messageContent,
+          model,
+          hat: selectedHat || undefined,
+          web_search: webSearchEnabled,
+        })
+        
+        responses.push({ model, content: data.content })
+        
+        // Add individual agent response
+        const agentMessage: Message = {
+          id: `${Date.now()}-${model}`,
+          role: 'assistant',
+          content: data.content,
+          timestamp: new Date(),
+          model,
+          agentName: model.split(':')[0],
+          duration_ms: data.duration_ms,
+        }
+        
+        setMessages(prev => {
+          const newMessages = [...prev, agentMessage]
+          updateConversation(newMessages)
+          return newMessages
+        })
+      } catch (e) {
+        console.error(`Error from model ${model}:`, e)
+      }
+    }
+    
+    // Synthesize responses
+    if (responses.length >= 2) {
+      const synthesisPrompt = `You are a synthesis agent. Multiple AI agents have provided responses to the user's query. Your task is to:
+1. Cross-check the information provided by each agent
+2. Identify points of agreement and disagreement
+3. Synthesize a comprehensive, accurate response that combines the best insights
+4. Flag any contradictions or uncertainties
+
+User query: "${text}"
+
+Agent responses:
+${responses.map(r => `### ${r.model}:\n${r.content}`).join('\n\n')}
+
+Please provide a synthesized response:`
+      
+      try {
+        const synthesisData = await api.generateChat({
+          message: synthesisPrompt,
+          system_prompt: 'You are a careful synthesis agent that cross-checks information and provides accurate, comprehensive responses.',
+        })
+        
+        const synthesisMessage: Message = {
+          id: `${Date.now()}-synthesis`,
+          role: 'synthesis',
+          content: synthesisData.content,
+          timestamp: new Date(),
+          model: synthesisData.model,
+          agentName: '🔄 Synthesis',
+        }
+        
+        setMessages(prev => {
+          const newMessages = [...prev, synthesisMessage]
+          updateConversation(newMessages)
+          return newMessages
+        })
+      } catch (e) {
+        console.error('Synthesis error:', e)
+      }
+    }
+    
+    setIsProcessingMulti(false)
+  }
+  
+  // Reflection mode: iterative self-improvement
+  const handleReflectionChat = async (text: string, messageContent: string) => {
+    setIsProcessingMulti(true)
+    
+    // Add user message
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: text,
+      timestamp: new Date(),
+      attachments: attachedFiles.length > 0 ? [...attachedFiles] : undefined,
+    }
+    
+    setMessages(prev => {
+      const newMessages = [...prev, userMessage]
+      updateConversation(newMessages)
+      return newMessages
+    })
+    setInput('')
+    setAttachedFiles([])
+    
+    let currentResponse = ''
+    
+    // Initial response
+    try {
+      const initialData = await api.generateChat({
+        message: messageContent,
+        hat: selectedHat || undefined,
+        web_search: webSearchEnabled,
+      })
+      currentResponse = initialData.content
+      
+      const initialMessage: Message = {
+        id: `${Date.now()}-initial`,
+        role: 'assistant',
+        content: currentResponse,
+        timestamp: new Date(),
+        model: initialData.model,
+        isReflection: false,
+      }
+      
+      setMessages(prev => {
+        const newMessages = [...prev, initialMessage]
+        updateConversation(newMessages)
+        return newMessages
+      })
+    } catch (e) {
+      console.error('Initial response error:', e)
+      setIsProcessingMulti(false)
+      return
+    }
+    
+    // Reflection iterations
+    for (let i = 0; i < reflectionDepth; i++) {
+      const reflectionPrompt = `You are a critical reviewer. Review and improve this response:
+
+Original query: "${text}"
+
+Current response:
+${currentResponse}
+
+Please:
+1. Identify any errors, inaccuracies, or missing information
+2. Check for logical inconsistencies
+3. Suggest improvements for clarity and completeness
+4. Provide an improved version
+
+Reflection ${i + 1}/${reflectionDepth}:`
+      
+      try {
+        const reflectionData = await api.generateChat({
+          message: reflectionPrompt,
+          system_prompt: 'You are a meticulous critic that improves responses through careful analysis.',
+        })
+        
+        currentResponse = reflectionData.content
+        
+        const reflectionMessage: Message = {
+          id: `${Date.now()}-reflection-${i}`,
+          role: 'assistant',
+          content: `**🔍 Reflection ${i + 1}/${reflectionDepth}:**\n\n${currentResponse}`,
+          timestamp: new Date(),
+          model: reflectionData.model,
+          isReflection: true,
+        }
+        
+        setMessages(prev => {
+          const newMessages = [...prev, reflectionMessage]
+          updateConversation(newMessages)
+          return newMessages
+        })
+      } catch (e) {
+        console.error(`Reflection ${i + 1} error:`, e)
+        break
+      }
+    }
+    
+    setIsProcessingMulti(false)
+  }
 
   // Search mutation
   const searchMutation = useMutation({
@@ -109,7 +468,7 @@ export function ChatPage() {
   // Handle send
   const handleSend = () => {
     const text = input.trim()
-    if (!text || chatMutation.isPending) return
+    if (!text || chatMutation.isPending || isProcessingMulti) return
 
     // Check for commands
     if (text.startsWith('/search ')) {
@@ -121,7 +480,11 @@ export function ChatPage() {
           content: text,
           timestamp: new Date(),
         }
-        setMessages(prev => [...prev, userMessage])
+        setMessages(prev => {
+          const newMessages = [...prev, userMessage]
+          updateConversation(newMessages)
+          return newMessages
+        })
         setInput('')
         searchMutation.mutate(query)
       }
@@ -140,7 +503,18 @@ export function ChatPage() {
       messageContent = text + fileContext
     }
 
-    // Regular chat
+    // Route to appropriate mode
+    if (chatMode === 'multi-agent') {
+      handleMultiAgentChat(text, messageContent)
+      return
+    }
+    
+    if (chatMode === 'reflection') {
+      handleReflectionChat(text, messageContent)
+      return
+    }
+
+    // Standard chat mode
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -148,7 +522,11 @@ export function ChatPage() {
       timestamp: new Date(),
       attachments: attachedFiles.length > 0 ? [...attachedFiles] : undefined,
     }
-    setMessages(prev => [...prev, userMessage])
+    setMessages(prev => {
+      const newMessages = [...prev, userMessage]
+      updateConversation(newMessages)
+      return newMessages
+    })
     setInput('')
     setAttachedFiles([]) // Clear attachments after sending
 
@@ -312,20 +690,141 @@ export function ChatPage() {
 
   // All hats (API + custom)
   const allHats = [...(hats || []), ...customHats]
+  
+  // Toggle model selection for multi-agent mode
+  const toggleModelSelection = (model: string) => {
+    setSelectedModels(prev => 
+      prev.includes(model) 
+        ? prev.filter(m => m !== model)
+        : [...prev, model]
+    )
+  }
 
   return (
     <div className="flex h-full">
+      {/* Conversation History Sidebar */}
+      {showHistory && (
+        <div className="w-64 border-r border-freya-border bg-freya-bg-secondary flex flex-col">
+          <div className="p-3 border-b border-freya-border flex items-center justify-between">
+            <h3 className="font-medium text-freya-text-primary flex items-center gap-2">
+              <History className="w-4 h-4" />
+              Conversations
+            </h3>
+            <button
+              onClick={createNewConversation}
+              className="p-1.5 rounded hover:bg-freya-bg-tertiary text-freya-accent-blue"
+              title="New conversation"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {conversations.length === 0 ? (
+              <p className="text-sm text-freya-text-muted text-center py-4">No conversations yet</p>
+            ) : (
+              conversations.map(conv => (
+                <div
+                  key={conv.id}
+                  className={clsx(
+                    'group p-2 rounded-lg cursor-pointer flex items-center justify-between',
+                    currentConversationId === conv.id
+                      ? 'bg-freya-accent-blue/20 border border-freya-accent-blue/30'
+                      : 'hover:bg-freya-bg-tertiary'
+                  )}
+                  onClick={() => switchConversation(conv.id)}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-freya-text-primary truncate">
+                      {conv.title}
+                    </p>
+                    <p className="text-xs text-freya-text-muted">
+                      {conv.messages.length} messages
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteConversation(conv.id)
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-freya-accent-red/20 text-freya-text-muted hover:text-freya-accent-red transition-all"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+      
       {/* Main chat area */}
       <div className="flex-1 flex flex-col">
         {/* Toolbar */}
         <div className="flex items-center gap-3 p-4 border-b border-freya-border bg-freya-bg-secondary">
+          {/* History toggle */}
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className={clsx(
+              'p-2 rounded-lg transition-colors',
+              showHistory ? 'bg-freya-accent-blue/20 text-freya-accent-blue' : 'hover:bg-freya-bg-tertiary text-freya-text-muted'
+            )}
+            title="Conversation history"
+          >
+            <History className="w-4 h-4" />
+          </button>
+          
+          {/* Chat Mode Selector */}
+          <div className="flex items-center gap-1 bg-freya-bg-tertiary rounded-lg p-1">
+            <button
+              onClick={() => setChatMode('standard')}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-all',
+                chatMode === 'standard'
+                  ? 'bg-freya-bg-primary text-freya-text-primary shadow'
+                  : 'text-freya-text-muted hover:text-freya-text-secondary'
+              )}
+              title="Standard single-model chat"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span className="hidden sm:inline">Standard</span>
+            </button>
+            <button
+              onClick={() => setChatMode('multi-agent')}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-all',
+                chatMode === 'multi-agent'
+                  ? 'bg-freya-accent-purple/20 text-freya-accent-purple shadow'
+                  : 'text-freya-text-muted hover:text-freya-text-secondary'
+              )}
+              title="Multi-agent mode: Multiple models + synthesis"
+            >
+              <Users className="w-4 h-4" />
+              <span className="hidden sm:inline">Multi-Agent</span>
+            </button>
+            <button
+              onClick={() => setChatMode('reflection')}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-all',
+                chatMode === 'reflection'
+                  ? 'bg-freya-accent-cyan/20 text-freya-accent-cyan shadow'
+                  : 'text-freya-text-muted hover:text-freya-text-secondary'
+              )}
+              title="Reflection mode: Self-critique and improvement"
+            >
+              <Brain className="w-4 h-4" />
+              <span className="hidden sm:inline">Reflection</span>
+            </button>
+          </div>
+          
+          <div className="h-6 w-px bg-freya-border" />
+          
           {/* Hat selector */}
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-freya-text-muted" />
             <select
               value={selectedHat}
               onChange={(e) => setSelectedHat(e.target.value)}
-              className="input py-1.5 text-sm w-40"
+              className="input py-1.5 text-sm w-32"
             >
               <option value="">Default</option>
               {allHats.map((hat) => (
@@ -355,7 +854,7 @@ export function ChatPage() {
             title="Enable web search for responses"
           >
             <Globe className="w-4 h-4" />
-            Web Search
+            <span className="hidden sm:inline">Web Search</span>
           </button>
 
           <div className="flex-1" />
@@ -368,6 +867,67 @@ export function ChatPage() {
             <Settings2 className="w-4 h-4" />
           </button>
         </div>
+        
+        {/* Mode-specific settings bar */}
+        {chatMode === 'multi-agent' && (
+          <div className="p-3 border-b border-freya-border bg-freya-accent-purple/5">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-freya-accent-purple" />
+                <span className="text-sm font-medium text-freya-text-primary">Select Models ({selectedModels.length}/{ models?.length || 0}):</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {models?.map(model => (
+                  <button
+                    key={model.name}
+                    onClick={() => toggleModelSelection(model.name)}
+                    className={clsx(
+                      'px-2 py-1 rounded text-xs font-medium transition-all',
+                      selectedModels.includes(model.name)
+                        ? 'bg-freya-accent-purple text-white'
+                        : 'bg-freya-bg-tertiary text-freya-text-muted hover:bg-freya-bg-secondary'
+                    )}
+                  >
+                    {model.name}
+                  </button>
+                ))}
+              </div>
+              {selectedModels.length < 2 && (
+                <span className="text-xs text-freya-accent-yellow">Select at least 2 models</span>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {chatMode === 'reflection' && (
+          <div className="p-3 border-b border-freya-border bg-freya-accent-cyan/5">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Brain className="w-4 h-4 text-freya-accent-cyan" />
+                <span className="text-sm font-medium text-freya-text-primary">Reflection Depth:</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {[1, 2, 3, 4].map(depth => (
+                  <button
+                    key={depth}
+                    onClick={() => setReflectionDepth(depth)}
+                    className={clsx(
+                      'w-8 h-8 rounded-lg text-sm font-medium transition-all',
+                      reflectionDepth === depth
+                        ? 'bg-freya-accent-cyan text-white'
+                        : 'bg-freya-bg-tertiary text-freya-text-muted hover:bg-freya-bg-secondary'
+                    )}
+                  >
+                    {depth}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-freya-text-muted">
+                {reflectionDepth} iteration{reflectionDepth > 1 ? 's' : ''} of self-critique and improvement
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -415,9 +975,12 @@ export function ChatPage() {
                 className={clsx(
                   'max-w-3xl rounded-lg p-4',
                   message.role === 'user' && 'bg-freya-accent-blue/20 border border-freya-accent-blue/30',
-                  message.role === 'assistant' && 'bg-freya-bg-tertiary border border-freya-border',
+                  message.role === 'assistant' && !message.agentName && 'bg-freya-bg-tertiary border border-freya-border',
+                  message.role === 'assistant' && message.agentName && 'bg-freya-accent-purple/10 border border-freya-accent-purple/30',
+                  message.role === 'synthesis' && 'bg-freya-accent-green/10 border border-freya-accent-green/30',
                   message.role === 'system' && 'bg-freya-accent-red/10 border border-freya-accent-red/30',
-                  message.role === 'tool' && 'bg-freya-accent-purple/10 border border-freya-accent-purple/30'
+                  message.role === 'tool' && 'bg-freya-accent-purple/10 border border-freya-accent-purple/30',
+                  message.isReflection && 'bg-freya-accent-cyan/10 border border-freya-accent-cyan/30'
                 )}
               >
                 {/* Attachments preview for user messages */}
@@ -442,11 +1005,17 @@ export function ChatPage() {
                     <span className={clsx(
                       'text-xs font-medium',
                       message.role === 'user' && 'text-freya-accent-blue',
-                      message.role === 'assistant' && 'text-freya-accent-green',
+                      message.role === 'assistant' && !message.agentName && 'text-freya-accent-green',
+                      message.role === 'assistant' && message.agentName && 'text-freya-accent-purple',
+                      message.role === 'synthesis' && 'text-freya-accent-green',
                       message.role === 'system' && 'text-freya-accent-red',
-                      message.role === 'tool' && 'text-freya-accent-purple'
+                      message.role === 'tool' && 'text-freya-accent-purple',
+                      message.isReflection && 'text-freya-accent-cyan'
                     )}>
                       {message.role === 'user' ? 'You' : 
+                       message.role === 'synthesis' ? '🔄 Synthesis' :
+                       message.agentName ? `🤖 ${message.agentName}` :
+                       message.isReflection ? '🔍 Reflection' :
                        message.role === 'assistant' ? 'Freya' :
                        message.role === 'tool' ? 'Tool' : 'System'}
                     </span>

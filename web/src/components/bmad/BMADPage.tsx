@@ -531,6 +531,28 @@ Répondez à ces questions ou posez-moi les vôtres !`,
             <span className="text-sm">Continuous</span>
           </button>
 
+          {/* New Project Button - Always visible */}
+          <button
+            onClick={() => {
+              setProjectName('NewProject')
+              setGoal('')
+              setChatMessages([])
+              setBrainstormComplete(false)
+              setMode('brainstorm')
+              setPipelineErrors([])
+              setAgentLogs([])
+              setSelectedArtifact(null)
+              setArtifactContent('')
+              setStartTime(null)
+            }}
+            disabled={isRunning}
+            className="btn-secondary flex items-center gap-2"
+            title="Start a new project"
+          >
+            <Sparkles className="w-4 h-4" />
+            New Project
+          </button>
+
           {/* Action Button */}
           {mode === 'brainstorm' ? (
             <div className="flex items-center gap-2">

@@ -193,18 +193,25 @@ export function FilesPage() {
   
   const handleDeleteFile = async () => {
     if (contextMenu.entry) {
-      const confirmed = confirm(`Are you sure you want to delete "${contextMenu.entry.name}"?`)
+      const isDir = contextMenu.entry.is_dir
+      const message = isDir 
+        ? `Are you sure you want to delete the folder "${contextMenu.entry.name}" and ALL its contents?`
+        : `Are you sure you want to delete "${contextMenu.entry.name}"?`
+      
+      const confirmed = confirm(message)
       if (confirmed) {
         try {
-          await api.deleteFile(contextMenu.entry.path)
+          // Use recursive=true for directories
+          await api.deleteFile(contextMenu.entry.path, isDir)
           queryClient.invalidateQueries({ queryKey: ['files'] })
           // Clear selection if we deleted the selected file
-          if (selectedFile === contextMenu.entry.path) {
+          if (selectedFile === contextMenu.entry.path || 
+              (isDir && selectedFile?.startsWith(contextMenu.entry.path + '/'))) {
             setSelectedFile(null)
             setFileContent('')
           }
         } catch (error) {
-          console.error('Failed to delete file:', error)
+          console.error('Failed to delete:', error)
           alert(`Failed to delete: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
       }
@@ -251,8 +258,13 @@ export function FilesPage() {
 
   // Navigate up
   const navigateUp = () => {
-    if (listing?.parent) {
+    if (listing?.parent !== undefined && listing?.parent !== null) {
       setCurrentPath(listing.parent)
+    } else if (currentPath) {
+      // Fallback: compute parent from current path
+      const parts = currentPath.split('/').filter(Boolean)
+      parts.pop()
+      setCurrentPath(parts.join('/'))
     }
   }
 
@@ -345,14 +357,14 @@ export function FilesPage() {
             </div>
           ) : sortedEntries.length > 0 ? (
             <div className="space-y-0.5">
-              {/* Go up button */}
-              {listing?.parent !== null && (
+              {/* Go up button - always show if not at root */}
+              {currentPath && (
                 <button
                   onClick={navigateUp}
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-freya-text-muted hover:text-freya-text-primary hover:bg-freya-bg-tertiary transition-colors"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  <span className="text-sm">..</span>
+                  <span className="text-sm">.. (Parent Directory)</span>
                 </button>
               )}
 
