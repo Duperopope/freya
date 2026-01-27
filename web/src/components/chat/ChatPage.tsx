@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Send, Loader2, Copy, Check, Settings2, Shield, Globe, FileText, X, Paperclip, Image, Plus, Edit2, Trash2, RotateCcw, StopCircle, Users, Brain, MessageSquare, History, ChevronDown, ChevronRight, Search, Lightbulb, Rocket, TrendingUp, Download, Share2 } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
@@ -54,6 +55,8 @@ const STORAGE_KEYS = {
 }
 
 export function ChatPage() {
+  const navigate = useNavigate()
+  
   // Conversation management
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
@@ -1045,20 +1048,39 @@ Create a structured brief with:
       }
       setMessages(prev => [...prev, briefMsg])
       
-      // Phase 4: Ready for BMAD
-      addLog(`🚀 **Phase 4/4: Prêt pour BMAD**\n\n✅ Le brief a été préparé et sera transféré au pipeline BMAD.\n\n➡️ Allez dans l'onglet **BMAD Studio** pour lancer la génération du projet.`)
+      // Phase 4: Auto-navigate to BMAD and start pipeline
+      addLog(`🚀 **Phase 4/4: Lancement automatique de BMAD**\n\n✅ Le brief a été préparé.\n\n🔄 Navigation automatique vers BMAD Studio...`)
       
-      // Update global state for BMAD integration
+      // Extract project name from brief (look for **Project Name:** pattern)
+      const projectNameMatch = briefData.content.match(/\*\*Project Name[:\*]*\*?\s*:?\s*([^\n*]+)/i)
+        || briefData.content.match(/Project Name[:\s]+([^\n]+)/i)
+        || briefData.content.match(/^#+ ([^\n]+)/m)
+      const extractedProjectName = projectNameMatch 
+        ? projectNameMatch[1].trim().replace(/[^a-zA-Z0-9_-]/g, '') 
+        : `AutoProject_${Date.now()}`
+      
+      addLog(`📂 Nom du projet: **${extractedProjectName}**`)
+      
+      // Update global state for BMAD integration with auto-start flag
       setResearchState({
         isActive: true,
-        phase: 'bmad_ready',
+        phase: 'bmad',
         searchResults: allResults,
         analysisReport: selectionData.content,
         selectedIdea: briefData.content,
+        autoStartBMAD: true,
+        bmadGoal: briefData.content,
+        bmadProjectName: extractedProjectName,
       })
       
-      setResearchPhase('bmad_ready')
+      setResearchPhase('bmad')
       setAutonomousIteration(prev => prev + 1)
+      
+      // Auto-navigate to BMAD page after a short delay
+      addLog(`🚀 **Redirection vers BMAD Studio dans 2 secondes...**`)
+      setTimeout(() => {
+        navigate('/bmad')
+      }, 2000)
       
     } catch (e) {
       console.error('[Autonomous] Error:', e)

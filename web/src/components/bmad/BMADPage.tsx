@@ -184,7 +184,10 @@ interface PipelineError {
 
 export function BMADPage() {
   useQueryClient()
-  const { bmadProgress, setBMADProgress } = useAppStore()
+  const { bmadProgress, setBMADProgress, researchState, setResearchState } = useAppStore()
+  
+  // Track if auto-start has been triggered to prevent multiple runs
+  const autoStartTriggeredRef = useRef(false)
   
   // Main state
   const [goal, setGoal] = useState('')
@@ -219,9 +222,6 @@ export function BMADPage() {
   
   // Pipeline view mode: compact or expanded
   const [pipelineViewMode, setPipelineViewMode] = useState<'compact' | 'expanded'>('expanded')
-  
-  // Research mode integration - from global store
-  const { researchState } = useAppStore()
   
   // Recent projects state
   const [recentProjects, setRecentProjects] = useState<{ name: string; lastModified: string; goal: string }[]>([])
@@ -366,6 +366,43 @@ export function BMADPage() {
       console.error('Failed to save recent projects:', e)
     }
   }
+  
+  // AUTO-START: Detect when Research mode sends a brief and auto-launch pipeline
+  useEffect(() => {
+    if (
+      researchState.autoStartBMAD && 
+      researchState.bmadGoal && 
+      researchState.bmadProjectName &&
+      !autoStartTriggeredRef.current &&
+      !bmadProgress?.running
+    ) {
+      console.log('[BMAD] Auto-start triggered from Research mode')
+      autoStartTriggeredRef.current = true
+      
+      // Set the goal and project name from research
+      setGoal(researchState.bmadGoal)
+      setProjectName(researchState.bmadProjectName)
+      setBrainstormComplete(true) // Skip brainstorm since we have the brief
+      
+      // Add system message about auto-start
+      setChatMessages([{
+        role: 'system',
+        content: `🤖 **Mode Autonome** - Brief reçu de Research Mode\n\n📋 **Projet:** ${researchState.bmadProjectName}\n\n🚀 **Lancement automatique du pipeline BMAD...**`,
+        timestamp: new Date(),
+      }])
+      
+      // Clear the auto-start flag
+      setResearchState({
+        autoStartBMAD: false,
+      })
+      
+      // Start the pipeline after a short delay to let state settle
+      setTimeout(() => {
+        console.log('[BMAD] Starting pipeline automatically...')
+        startMutation.mutate()
+      }, 1000)
+    }
+  }, [researchState.autoStartBMAD, researchState.bmadGoal, researchState.bmadProjectName, bmadProgress?.running])
   
   // Load recent projects on mount - from localStorage AND from Files/artifacts
   useEffect(() => {

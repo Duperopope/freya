@@ -40,6 +40,10 @@ interface ResearchState {
   searchResults: unknown[]
   analysisReport: string | null
   selectedIdea: string | null
+  // Auto-start BMAD pipeline
+  autoStartBMAD: boolean
+  bmadGoal: string | null
+  bmadProjectName: string | null
 }
 
 interface AppState {
@@ -103,6 +107,9 @@ export const useAppStore = create<AppState>()(
         searchResults: [],
         analysisReport: null,
         selectedIdea: null,
+        autoStartBMAD: false,
+        bmadGoal: null,
+        bmadProjectName: null,
       },
       wsConnected: false,
       lastActiveTab: 'chat',
