@@ -239,6 +239,10 @@ export interface BMADStatus {
   agents_completed: string[]
   artifacts_generated: string[]
   error: string | null
+  logs?: BMADLog[]
+  project_name?: string
+  goal?: string
+  started_at?: string
 }
 
 export interface ArtifactInfo {
@@ -259,6 +263,35 @@ export async function runBMAD(goal: string, projectName = 'FreyaProject'): Promi
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ goal, project_name: projectName }),
   })
+  return handleResponse(res)
+}
+
+export interface ResumeInfo {
+  project_name: string
+  goal: string
+  completed_agents: string[]
+  can_resume: boolean
+  next_agent: string | null
+  message: string
+}
+
+export async function checkBMADResume(projectName: string): Promise<ResumeInfo> {
+  const res = await fetch(`${API_BASE}/bmad/resume?project_name=${encodeURIComponent(projectName)}`, {
+    method: 'POST',
+  })
+  return handleResponse(res)
+}
+
+export interface BMADLog {
+  timestamp: string
+  level: string
+  agent: string | null
+  message: string
+  details?: Record<string, unknown>
+}
+
+export async function getBMADLogs(): Promise<{ logs: BMADLog[]; project_name: string; running: boolean }> {
+  const res = await fetch(`${API_BASE}/bmad/logs`)
   return handleResponse(res)
 }
 

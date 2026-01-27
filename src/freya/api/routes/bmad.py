@@ -307,6 +307,19 @@ async def run_bmad_workflow(
             # Save pipeline state for resume capability
             state_file = output_dir / ".bmad_state.json"
             
+            # Check if we should resume from a previous run
+            already_completed: list[str] = []
+            if state_file.exists():
+                try:
+                    saved_state = json.loads(state_file.read_text(encoding="utf-8"))
+                    already_completed = saved_state.get("completed_agents", [])
+                    if already_completed:
+                        log_and_broadcast("info", f"🔄 Reprise du projet - {len(already_completed)} agents déjà complétés")
+                        log_and_broadcast("info", f"✓ Agents complétés: {', '.join(already_completed)}")
+                except Exception as e:
+                    logger.warning(f"Failed to load previous state: {e}")
+                    already_completed = []
+            
             # Agent execution sequence with descriptions
             agents = [
                 ("analyst", "📊 Analyste", "Crée le brief projet"),
@@ -316,9 +329,18 @@ async def run_bmad_workflow(
                 ("sm", "📝 Scrum Master", "Crée les user stories"),
                 ("dev", "💻 Développeur", "Génère le code"),
                 ("qa", "🔍 QA Engineer", "Teste et valide"),
+                ("runner", "🚀 Test Runner", "Lance et valide l'application"),
             ]
             
+            max_fix_cycles = 3  # Maximum Dev→QA→Runner cycles
+            current_cycle = 0
+            
             for idx, (agent_name, agent_label, agent_desc) in enumerate(agents):
+                # Skip already completed agents (resume mode)
+                if agent_name in already_completed:
+                    log_and_broadcast("info", f"⏭️ {agent_label} déjà complété, on passe au suivant", agent_name)
+                    _bmad_runtime.complete_agent(agent_name)
+                    continue
                 _bmad_runtime.set_agent(agent_name)
                 log_and_broadcast("info", f"▶️ {agent_label} - {agent_desc}", agent_name)
                 broadcast("agent_start", {"agent": agent_name, "progress": (idx / len(agents)) * 100})
@@ -341,6 +363,40 @@ async def run_bmad_workflow(
                             agent_name,
                             {"artifact": str(artifact_path.name), "preview": preview, "size": len(content)}
                         )
+                        
+                        # Check if Runner agent detected failures - trigger fix cycle
+                        if agent_name == "runner" and current_cycle < max_fix_cycles:
+                            if "❌" in content or "FAIL" in content:
+                                current_cycle += 1
+                                log_and_broadcast(
+                                    "info",
+                                    f"🔄 Cycle de correction {current_cycle}/{max_fix_cycles} - Des erreurs ont été détectées",
+                                    "system"
+                                )
+                                
+                                # Re-run Dev with fix instructions
+                                fix_goal = f"""
+FIX THE FOLLOWING ISSUES from the test runner report:
+
+{content[:2000]}
+
+Original goal: {body.goal}
+
+Fix the code to make all tests pass.
+"""
+                                log_and_broadcast("info", "🔧 Relance du Développeur pour corriger les erreurs", "dev")
+                                _run_single_agent(state, "dev", fix_goal, output_dir)
+                                
+                                log_and_broadcast("info", "🔍 Relance du QA pour vérifier les corrections", "qa")
+                                _run_single_agent(state, "qa", body.goal, output_dir)
+                                
+                                log_and_broadcast("info", "🚀 Relance du Runner pour valider", "runner")
+                                artifact_path = _run_single_agent(state, "runner", body.goal, output_dir)
+                                
+                                # Check again
+                                content = artifact_path.read_text(encoding="utf-8")
+                                if "✅ ALL CHECKS PASSED" in content:
+                                    log_and_broadcast("success", f"🎉 Toutes les vérifications passent après {current_cycle} cycle(s) de correction!", "system")
                     else:
                         log_and_broadcast("success", f"✅ {agent_label} terminé en {elapsed:.1f}s", agent_name)
                     
@@ -379,6 +435,8 @@ async def run_bmad_workflow(
             
             log_and_broadcast("info", f"🏁 Pipeline terminé: {len(completed)}/{len(agents)} agents complétés")
             log_and_broadcast("info", f"📦 Artifacts générés: {len(artifacts)}")
+            if current_cycle > 0:
+                log_and_broadcast("info", f"🔄 Cycles de correction effectués: {current_cycle}")
             
             # List generated files
             all_files = list(output_dir.rglob("*"))
@@ -887,7 +945,7 @@ def _run_single_agent(state, agent_name: str, goal: str, output_dir: Path) -> Pa
     from ...agents.base import AgentContext
     from ...agents import (
         AnalystAgent, PMAgent, ArchitectAgent,
-        ProductOwnerAgent, ScrumMasterAgent, DeveloperAgent, QAAgent
+        ProductOwnerAgent, ScrumMasterAgent, DeveloperAgent, QAAgent, TestRunnerAgent
     )
     
     ctx = AgentContext(
@@ -906,7 +964,11 @@ def _run_single_agent(state, agent_name: str, goal: str, output_dir: Path) -> Pa
         "sm": (ScrumMasterAgent, "sm"),
         "dev": (DeveloperAgent, "dev"),
         "qa": (QAAgent, "qa"),
+        "runner": (TestRunnerAgent, "qa"),  # Use QA role for model selection
     }
+    
+    if agent_name not in agent_classes:
+        raise ValueError(f"Unknown agent: {agent_name}")
     
     cls, role = agent_classes[agent_name]
     
@@ -924,5 +986,18 @@ def _run_single_agent(state, agent_name: str, goal: str, output_dir: Path) -> Pa
     if agent_name in ("dev", "qa"):
         kwargs["quality"] = orch.quality
     
-    agent = cls(*base_args, **kwargs)
+    # Runner has different constructor
+    if agent_name == "runner":
+        # TestRunnerAgent doesn't need all the ollama/router stuff
+        agent = cls(
+            agent_name.upper(),
+            orch.fs,
+            orch.ollama,
+            orch.router,
+            orch.model_for_role(role),
+            timeout_sec=120,
+        )
+    else:
+        agent = cls(*base_args, **kwargs)
+    
     return agent.run(ctx)

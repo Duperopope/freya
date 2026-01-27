@@ -5,6 +5,7 @@ from .po import ProductOwnerAgent
 from .sm import ScrumMasterAgent
 from .dev import DeveloperAgent
 from .qa import QAAgent
+from .runner import TestRunnerAgent
 
 __all__ = [
     "AnalystAgent",
@@ -14,4 +15,5 @@ __all__ = [
     "ScrumMasterAgent",
     "DeveloperAgent",
     "QAAgent",
+    "TestRunnerAgent",
 ]

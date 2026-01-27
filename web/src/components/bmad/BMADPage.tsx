@@ -155,6 +155,28 @@ const AGENTS: AgentDef[] = [
     output: 'QA.md',
     description: 'Runs quality assurance',
     questions: []
+  },
+  {
+    id: 'runner',
+    name: 'Test Runner',
+    role: 'runner',
+    icon: Rocket,
+    color: 'text-freya-accent-cyan',
+    bgColor: 'bg-freya-accent-cyan/20',
+    output: 'run-report.md',
+    description: 'Launches and tests the application',
+    questions: []
+  },
+  {
+    id: 'validator',
+    name: 'Validator',
+    role: 'validator',
+    icon: CheckCircle2,
+    color: 'text-freya-accent-green',
+    bgColor: 'bg-freya-accent-green/20',
+    output: 'validation.md',
+    description: 'Final validation loop (Dev→QA)',
+    questions: []
   }
 ]
 
@@ -226,6 +248,9 @@ export function BMADPage() {
   // Recent projects state
   const [recentProjects, setRecentProjects] = useState<{ name: string; lastModified: string; goal: string }[]>([])
   const [showRecentProjects, setShowRecentProjects] = useState(false)
+  const [selectedProject, setSelectedProject] = useState<{ name: string; goal: string } | null>(null)
+  const [resumeInfo, setResumeInfo] = useState<api.ResumeInfo | null>(null)
+  const [checkingResume, setCheckingResume] = useState(false)
 
   // Fetch BMAD status
   const { data: status, refetch: refetchStatus } = useQuery({
@@ -244,16 +269,37 @@ export function BMADPage() {
   // Update store and mode when status changes
   useEffect(() => {
     if (status) {
+      // Include logs from status in the progress
       setBMADProgress(status.running ? {
         running: status.running,
         current_agent: status.current_agent,
         agents_completed: status.agents_completed,
         artifacts_generated: status.artifacts_generated,
+        logs: status.logs?.map(log => ({
+          timestamp: log.timestamp,
+          level: log.level,
+          agent: log.agent,
+          message: log.message,
+          details: log.details || {},
+        })) || [],
       } : null)
+      
+      // Also update local agentLogs from status logs
+      if (status.logs && status.logs.length > 0) {
+        const newLogs = status.logs.map(log => ({
+          agent: log.agent || 'system',
+          event: log.level,
+          message: log.message,
+          timestamp: new Date(),
+          details: log.details,
+        }))
+        setAgentLogs(newLogs)
+      }
       
       if (status.running) {
         setMode('running')
-      } else if (status.agents_completed.length === AGENTS.length) {
+      } else if (status.agents_completed.length >= AGENTS.length - 2) {
+        // Complete when main agents are done (ignore runner/validator if not run)
         setMode('complete')
       }
       
@@ -841,27 +887,113 @@ Répondez à ces questions ou posez-moi les vôtres !`,
               </button>
               
               {showRecentProjects && (
-                <div className="px-3 pb-3 space-y-2 max-h-48 overflow-y-auto">
+                <div className="px-3 pb-3 space-y-2 max-h-64 overflow-y-auto">
                   {recentProjects.length > 0 ? (
                     recentProjects.map((project, idx) => (
-                      <button
+                      <div
                         key={idx}
-                        onClick={() => {
-                          setProjectName(project.name)
-                          setGoal(project.goal)
-                          setShowRecentProjects(false)
-                        }}
-                        className="w-full text-left p-2 rounded bg-freya-bg-primary hover:bg-freya-bg-tertiary"
+                        className={clsx(
+                          "w-full text-left p-2 rounded border transition-all",
+                          selectedProject?.name === project.name
+                            ? "bg-freya-accent-blue/10 border-freya-accent-blue/30"
+                            : "bg-freya-bg-primary border-transparent hover:bg-freya-bg-tertiary"
+                        )}
                       >
-                        <div className="flex items-center gap-2">
-                          <FolderOpen className="w-4 h-4 text-freya-accent-yellow" />
-                          <span className="font-medium text-freya-text-primary text-sm truncate">{project.name}</span>
-                        </div>
-                        <p className="text-xs text-freya-text-muted mt-1 truncate">{project.goal}</p>
-                        <p className="text-xs text-freya-text-muted/60 mt-0.5">
-                          {new Date(project.lastModified).toLocaleDateString()}
-                        </p>
-                      </button>
+                        <button
+                          onClick={async () => {
+                            setProjectName(project.name)
+                            setGoal(project.goal)
+                            setSelectedProject(project)
+                            
+                            // Check if project can be resumed
+                            setCheckingResume(true)
+                            try {
+                              const info = await api.checkBMADResume(project.name)
+                              setResumeInfo(info)
+                            } catch {
+                              setResumeInfo(null)
+                            }
+                            setCheckingResume(false)
+                          }}
+                          className="w-full text-left"
+                        >
+                          <div className="flex items-center gap-2">
+                            <FolderOpen className="w-4 h-4 text-freya-accent-yellow" />
+                            <span className="font-medium text-freya-text-primary text-sm truncate">{project.name}</span>
+                          </div>
+                          <p className="text-xs text-freya-text-muted mt-1 truncate">{project.goal}</p>
+                          <p className="text-xs text-freya-text-muted/60 mt-0.5">
+                            {new Date(project.lastModified).toLocaleDateString()}
+                          </p>
+                        </button>
+                        
+                        {/* Resume info for selected project */}
+                        {selectedProject?.name === project.name && (
+                          <div className="mt-2 pt-2 border-t border-freya-border">
+                            {checkingResume ? (
+                              <div className="flex items-center gap-2 text-xs text-freya-text-muted">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Vérification...
+                              </div>
+                            ) : resumeInfo?.can_resume ? (
+                              <div className="space-y-2">
+                                <div className="text-xs text-freya-text-muted">
+                                  <span className="text-freya-accent-green">✓</span> Peut reprendre depuis: <strong>{resumeInfo.next_agent}</strong>
+                                </div>
+                                <div className="text-xs text-freya-text-muted">
+                                  Complétés: {resumeInfo.completed_agents.join(', ') || 'Aucun'}
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setBrainstormComplete(true)
+                                      setShowRecentProjects(false)
+                                      // Start from where we left off
+                                      startMutation.mutate()
+                                    }}
+                                    className="flex-1 btn-primary text-xs py-1"
+                                  >
+                                    <Repeat className="w-3 h-3 mr-1" />
+                                    Reprendre
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setShowRecentProjects(false)
+                                      setMode('brainstorm')
+                                    }}
+                                    className="flex-1 btn-secondary text-xs py-1"
+                                  >
+                                    Modifier
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    setBrainstormComplete(true)
+                                    setShowRecentProjects(false)
+                                    startMutation.mutate()
+                                  }}
+                                  className="flex-1 btn-primary text-xs py-1"
+                                >
+                                  <Play className="w-3 h-3 mr-1" />
+                                  Relancer
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setShowRecentProjects(false)
+                                    setMode('brainstorm')
+                                  }}
+                                  className="flex-1 btn-secondary text-xs py-1"
+                                >
+                                  Modifier
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     ))
                   ) : (
                     <p className="text-xs text-freya-text-muted text-center py-2">No recent projects</p>
@@ -876,6 +1008,8 @@ Répondez à ces questions ou posez-moi les vôtres !`,
                       setBrainstormComplete(false)
                       setMode('brainstorm')
                       setShowRecentProjects(false)
+                      setSelectedProject(null)
+                      setResumeInfo(null)
                     }}
                     className="w-full text-left p-2 rounded border border-dashed border-freya-border hover:border-freya-accent-blue hover:bg-freya-accent-blue/5"
                   >
