@@ -8,7 +8,8 @@ import {
   Shield,
   ChevronLeft,
   ChevronRight,
-  Zap
+  Zap,
+  Rocket
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAppStore } from '../../stores/appStore'
@@ -24,6 +25,7 @@ const navItems = [
   { path: '/bmad', icon: Workflow, label: 'BMAD Studio', description: 'Workflow' },
   { path: '/files', icon: FolderOpen, label: 'Files', description: 'File Browser' },
   { path: '/watch', icon: Shield, label: 'Cyber Watch', description: 'Security Feed' },
+  { path: '/launcher', icon: Rocket, label: 'Launcher', description: 'Update & Launch' },
   { path: '/settings', icon: Settings, label: 'Settings', description: 'Configuration' },
 ]
 

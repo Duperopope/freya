@@ -10,9 +10,10 @@ All API endpoints organized by domain:
 - files: File browser and editor
 - watch: Cyber security monitoring
 - settings: Configuration management
+- launcher: One-click update and launch operations
 """
 
-from . import chat, bench, bmad, models, files, watch, settings
+from . import chat, bench, bmad, models, files, watch, settings, launcher
 
 __all__ = [
     "chat",
@@ -22,4 +23,5 @@ __all__ = [
     "files",
     "watch",
     "settings",
+    "launcher",
 ]

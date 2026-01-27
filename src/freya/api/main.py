@@ -25,7 +25,7 @@ from ..router import LLMRouter
 from ..orchestrator import Orchestrator
 
 from .websocket import WebSocketManager, websocket_endpoint
-from .routes import chat, bench, bmad, models, files, watch, settings
+from .routes import chat, bench, bmad, models, files, watch, settings, launcher
 
 # -----------------------------------------------------------------------------
 # Logging
@@ -123,7 +123,7 @@ def create_app(
     app = FastAPI(
         title="Freya API",
         description="BMAD-aligned multi-agent orchestrator for local LLMs with enhanced UX",
-        version="2.3.5",
+        version="2.5.5",
         docs_url="/api/docs" if debug else None,
         redoc_url="/api/redoc" if debug else None,
         lifespan=lifespan,
@@ -200,6 +200,7 @@ def create_app(
     app.include_router(files.router, prefix="/api/files", tags=["Files"])
     app.include_router(watch.router, prefix="/api/watch", tags=["Watch"])
     app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
+    app.include_router(launcher.router, prefix="/api/launcher", tags=["Launcher"])
     
     # WebSocket endpoint (MUST be before static files mount)
     @app.websocket("/ws")

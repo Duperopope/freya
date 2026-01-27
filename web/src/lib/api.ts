@@ -916,3 +916,96 @@ export const AGENT_PROFILES: AgentProfile[] = [
 export async function getAgentProfiles(): Promise<AgentProfile[]> {
   return AGENT_PROFILES
 }
+
+// -----------------------------------------------------------------------------
+// Launcher API (v2.5.5)
+// -----------------------------------------------------------------------------
+export interface LauncherStatus {
+  is_updating: boolean
+  is_building: boolean
+  is_restarting: boolean
+  current_operation: string | null
+  progress: number
+  error: string | null
+  last_update: string | null
+  last_build: string | null
+  git_info: {
+    branch: string
+    commit: string
+    remote_url: string
+    has_updates: boolean
+    ahead: number
+    behind: number
+    last_message?: string
+    last_commit_date?: string
+    error?: string
+  } | null
+  system_info: {
+    project_root: string
+    python_version: string
+    node_version: string
+    node_ok: boolean
+    npm_version: string
+    npm_ok: boolean
+    web_built: boolean
+    node_modules_installed: boolean
+    platform: string
+  } | null
+}
+
+export interface LauncherResult {
+  success: boolean
+  message: string
+  details: Record<string, unknown> | null
+}
+
+export interface LauncherLog {
+  timestamp: string
+  level: string
+  message: string
+}
+
+export interface LauncherLogsResponse {
+  logs: LauncherLog[]
+  total: number
+}
+
+export async function getLauncherStatus(): Promise<LauncherStatus> {
+  const res = await fetch(`${API_BASE}/launcher/status`)
+  return handleResponse(res)
+}
+
+export async function getLauncherLogs(limit = 50): Promise<LauncherLogsResponse> {
+  const res = await fetch(`${API_BASE}/launcher/logs?limit=${limit}`)
+  return handleResponse(res)
+}
+
+export async function checkForUpdates(): Promise<LauncherResult> {
+  const res = await fetch(`${API_BASE}/launcher/check-updates`, { method: 'POST' })
+  return handleResponse(res)
+}
+
+export async function triggerUpdate(): Promise<LauncherResult> {
+  const res = await fetch(`${API_BASE}/launcher/update`, { method: 'POST' })
+  return handleResponse(res)
+}
+
+export async function triggerBuild(): Promise<LauncherResult> {
+  const res = await fetch(`${API_BASE}/launcher/build`, { method: 'POST' })
+  return handleResponse(res)
+}
+
+export async function triggerBootstrap(): Promise<LauncherResult> {
+  const res = await fetch(`${API_BASE}/launcher/bootstrap`, { method: 'POST' })
+  return handleResponse(res)
+}
+
+export async function clearLauncherError(): Promise<LauncherResult> {
+  const res = await fetch(`${API_BASE}/launcher/clear-error`, { method: 'POST' })
+  return handleResponse(res)
+}
+
+export async function clearLauncherLogs(): Promise<LauncherResult> {
+  const res = await fetch(`${API_BASE}/launcher/clear-logs`, { method: 'POST' })
+  return handleResponse(res)
+}

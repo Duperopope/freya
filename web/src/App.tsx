@@ -9,6 +9,7 @@ import { BMADPage } from './components/bmad/BMADPage'
 import { SettingsPage } from './components/settings/SettingsPage'
 import { FilesPage } from './components/files/FilesPage'
 import { WatchPage } from './components/watch/WatchPage'
+import { LauncherPage } from './components/launcher/LauncherPage'
 import { useAppStore } from './stores/appStore'
 import { useWebSocket } from './hooks/useWebSocket'
 
@@ -69,6 +70,7 @@ function App() {
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/files" element={<FilesPage />} />
               <Route path="/watch" element={<WatchPage />} />
+              <Route path="/launcher" element={<LauncherPage />} />
             </Routes>
           </main>
 
