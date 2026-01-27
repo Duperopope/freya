@@ -232,10 +232,20 @@ export function ChatPage() {
   }
 
   // Handle key press - Enter to send, Ctrl/Cmd+Enter for newline
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter') {
       if (e.ctrlKey || e.metaKey || e.shiftKey) {
-        // Allow newline with Ctrl/Cmd/Shift+Enter
+        // Insert newline with Ctrl/Cmd/Shift+Enter
+        e.preventDefault()
+        const target = e.target as HTMLTextAreaElement
+        const start = target.selectionStart
+        const end = target.selectionEnd
+        const newValue = input.slice(0, start) + '\n' + input.slice(end)
+        setInput(newValue)
+        // Set cursor position after newline
+        setTimeout(() => {
+          target.selectionStart = target.selectionEnd = start + 1
+        }, 0)
         return
       }
       e.preventDefault()

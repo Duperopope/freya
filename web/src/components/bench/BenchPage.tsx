@@ -128,6 +128,9 @@ export function BenchPage() {
   const { benchProgress, setBenchProgress } = useAppStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
+  // Prevent double-start (fixes 409 Conflict errors)
+  const isStartingRef = useRef(false)
+  
   // Core state
   const [selectedProgram, setSelectedProgram] = useState<BenchProgram>('bench-fast')
   const [expandedRole, setExpandedRole] = useState<string | null>(null)
@@ -227,11 +230,17 @@ export function BenchPage() {
       }
       
       // Handle continuous mode progression - trigger when bench completes
-      if (continuousMode && !status.running && continuousPhase && autoAdvance) {
+      // Only trigger if we were running before and now stopped
+      if (continuousMode && !status.running && continuousPhase && autoAdvance && !startMutation.isPending) {
         // Reset time tracking for next phase
         setPhaseStartTime(null)
         setEstimatedTimeRemaining(null)
-        handleContinuousProgression()
+        // Use setTimeout to prevent multiple rapid calls
+        setTimeout(() => {
+          if (!startMutation.isPending) {
+            handleContinuousProgression()
+          }
+        }, 500)
       }
       
       // Reset time tracking when stopped
@@ -255,12 +264,28 @@ export function BenchPage() {
     }
   }, [billboard, status?.running])
 
-  // Start benchmark mutation
+  // Start benchmark mutation with guard against double-start
   const startMutation = useMutation({
-    mutationFn: (program: string) => api.startBench(program, true),
+    mutationFn: async (program: string) => {
+      // Guard: prevent multiple concurrent start calls
+      if (isStartingRef.current || status?.running) {
+        console.log('[Bench] Start blocked: already starting or running')
+        return Promise.resolve({ status: 'already_running' })
+      }
+      isStartingRef.current = true
+      try {
+        return await api.startBench(program, true)
+      } finally {
+        // Reset after a short delay to prevent race conditions
+        setTimeout(() => { isStartingRef.current = false }, 1000)
+      }
+    },
     onSuccess: () => {
       refetchStatus()
       queryClient.invalidateQueries({ queryKey: ['billboard'] })
+    },
+    onError: () => {
+      isStartingRef.current = false
     },
   })
 
@@ -302,9 +327,14 @@ export function BenchPage() {
       setSelectedProgram(nextProgram.id)
       // Delay to allow UI update and prevent race conditions
       setTimeout(() => {
-        console.log(`[Bench] Starting ${nextProgram.id}`)
-        startMutation.mutate(nextProgram.id)
-        setPhaseStartTime(new Date())
+        // Double-check not already running before starting
+        if (!isStartingRef.current && !status?.running) {
+          console.log(`[Bench] Starting ${nextProgram.id}`)
+          startMutation.mutate(nextProgram.id)
+          setPhaseStartTime(new Date())
+        } else {
+          console.log(`[Bench] Skipped starting ${nextProgram.id}: already running`)
+        }
       }, 3000)
     } else if (continuousPhase === 'bench-advanced') {
       // All benchmark phases complete, switch to fine-tuning mode
@@ -322,6 +352,11 @@ export function BenchPage() {
 
   // Start continuous benchmark
   const startContinuousBenchmark = () => {
+    // Guard against double-start
+    if (isStartingRef.current || status?.running) {
+      console.log('[Bench] Continuous start blocked: already running')
+      return
+    }
     console.log('[Bench] Starting continuous benchmark from bench-fast')
     setContinuousMode(true)
     setContinuousPhase('bench-fast')

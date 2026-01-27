@@ -172,21 +172,41 @@ export function FilesPage() {
   }
   
   const confirmRename = async () => {
-    if (renameEntry && renameValue.trim()) {
-      // TODO: Implement rename API
-      console.log(`Rename ${renameEntry.path} to ${renameValue}`)
+    if (renameEntry && renameValue.trim() && renameValue !== renameEntry.name) {
+      try {
+        await api.renameFile(renameEntry.path, renameValue)
+        queryClient.invalidateQueries({ queryKey: ['files'] })
+        // If we renamed the selected file, update the selection
+        if (selectedFile === renameEntry.path) {
+          const newPath = renameEntry.path.replace(renameEntry.name, renameValue)
+          setSelectedFile(newPath)
+        }
+      } catch (error) {
+        console.error('Failed to rename file:', error)
+        alert(`Failed to rename: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
     }
     setShowRenameDialog(false)
     setRenameEntry(null)
     setRenameValue('')
   }
   
-  const deleteFile = async () => {
+  const handleDeleteFile = async () => {
     if (contextMenu.entry) {
       const confirmed = confirm(`Are you sure you want to delete "${contextMenu.entry.name}"?`)
       if (confirmed) {
-        // TODO: Implement delete API
-        console.log(`Delete ${contextMenu.entry.path}`)
+        try {
+          await api.deleteFile(contextMenu.entry.path)
+          queryClient.invalidateQueries({ queryKey: ['files'] })
+          // Clear selection if we deleted the selected file
+          if (selectedFile === contextMenu.entry.path) {
+            setSelectedFile(null)
+            setFileContent('')
+          }
+        } catch (error) {
+          console.error('Failed to delete file:', error)
+          alert(`Failed to delete: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
       }
     }
     setContextMenu({ show: false, x: 0, y: 0, entry: null })
@@ -548,6 +568,16 @@ export function FilesPage() {
                 {fileContent.split('\n').length}
               </div>
             </div>
+            
+            {/* File dates from listing */}
+            {listing?.entries.find(e => e.path === selectedFile)?.modified_at && (
+              <div>
+                <div className="text-sm text-freya-text-muted mb-1">Last Modified</div>
+                <div className="text-freya-text-primary text-sm">
+                  {new Date(listing.entries.find(e => e.path === selectedFile)!.modified_at!).toLocaleString()}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -605,7 +635,7 @@ export function FilesPage() {
           <div className="border-t border-freya-border my-1" />
           
           <button
-            onClick={deleteFile}
+            onClick={handleDeleteFile}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-freya-accent-red hover:bg-freya-accent-red/10"
           >
             <Trash2 className="w-4 h-4" />

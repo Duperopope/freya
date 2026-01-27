@@ -321,6 +321,22 @@ export async function getFileTree(maxDepth = 3): Promise<Record<string, unknown>
   return handleResponse(res)
 }
 
+export async function deleteFile(path: string): Promise<{ deleted: boolean }> {
+  const res = await fetch(`${API_BASE}/files/?path=${encodeURIComponent(path)}`, {
+    method: 'DELETE',
+  })
+  return handleResponse(res)
+}
+
+export async function renameFile(path: string, newName: string): Promise<{ success: boolean; new_path: string }> {
+  const res = await fetch(`${API_BASE}/files/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, new_name: newName }),
+  })
+  return handleResponse(res)
+}
+
 // -----------------------------------------------------------------------------
 // Watch
 // -----------------------------------------------------------------------------

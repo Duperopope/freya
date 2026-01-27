@@ -7,23 +7,23 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Freya Dark Theme
+        // Freya Theme - Using CSS Variables for dynamic theming
         freya: {
           bg: {
-            primary: '#0a0e14',
-            secondary: '#0f1419',
-            tertiary: '#151b23',
-            elevated: '#1a2230',
+            primary: 'var(--freya-bg-primary)',
+            secondary: 'var(--freya-bg-secondary)',
+            tertiary: 'var(--freya-bg-tertiary)',
+            elevated: 'var(--freya-bg-elevated)',
           },
           border: {
-            DEFAULT: '#2d3748',
-            light: '#3d4a5c',
+            DEFAULT: 'var(--freya-border)',
+            light: 'var(--freya-border-light)',
             accent: '#4299e1',
           },
           text: {
-            primary: '#e6edf3',
-            secondary: '#8b949e',
-            muted: '#6b7280',
+            primary: 'var(--freya-text-primary)',
+            secondary: 'var(--freya-text-secondary)',
+            muted: 'var(--freya-text-muted)',
             accent: '#58a6ff',
           },
           accent: {

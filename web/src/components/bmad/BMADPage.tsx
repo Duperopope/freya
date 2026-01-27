@@ -281,14 +281,60 @@ export function BMADPage() {
     }
   }
   
-  // Load recent projects on mount
+  // Load recent projects on mount - from localStorage AND from Files/artifacts
   useEffect(() => {
-    try {
-      const projects = JSON.parse(localStorage.getItem('freya_recent_projects') || '[]')
-      setRecentProjects(projects)
-    } catch (e) {
-      console.error('Failed to load recent projects:', e)
+    const loadProjects = async () => {
+      try {
+        // Load from localStorage first
+        const localProjects = JSON.parse(localStorage.getItem('freya_recent_projects') || '[]')
+        
+        // Also scan the artifacts folder for real projects
+        try {
+          const artifactsList = await api.getArtifacts()
+          if (artifactsList && artifactsList.length > 0) {
+            // Group artifacts by project directory
+            const projectMap = new Map<string, { name: string; lastModified: string; goal: string }>()
+            
+            for (const artifact of artifactsList) {
+              // Extract project name from path (e.g., "FreyaProject/project-brief.md" -> "FreyaProject")
+              const parts = artifact.path.split('/')
+              if (parts.length >= 2) {
+                const projectName = parts[0]
+                if (!projectMap.has(projectName)) {
+                  projectMap.set(projectName, {
+                    name: projectName,
+                    lastModified: artifact.modified_at || new Date().toISOString(),
+                    goal: `Project from Files (${projectName})`
+                  })
+                } else {
+                  // Update lastModified if this artifact is more recent
+                  const existing = projectMap.get(projectName)!
+                  if (artifact.modified_at && artifact.modified_at > existing.lastModified) {
+                    existing.lastModified = artifact.modified_at
+                  }
+                }
+              }
+            }
+            
+            // Merge with localStorage projects (local takes priority)
+            const localNames = new Set(localProjects.map((p: { name: string }) => p.name))
+            const fileProjects = Array.from(projectMap.values()).filter(p => !localNames.has(p.name))
+            
+            const merged = [...localProjects, ...fileProjects].slice(0, 10)
+            setRecentProjects(merged)
+          } else {
+            setRecentProjects(localProjects)
+          }
+        } catch (artifactError) {
+          console.error('Failed to load projects from artifacts:', artifactError)
+          setRecentProjects(localProjects)
+        }
+      } catch (e) {
+        console.error('Failed to load recent projects:', e)
+      }
     }
+    
+    loadProjects()
   }, [])
 
   // Load artifact content

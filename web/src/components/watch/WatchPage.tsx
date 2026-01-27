@@ -307,16 +307,23 @@ export function WatchPage() {
         {/* Stats Cards */}
         <div className="grid grid-cols-6 gap-3 mb-4">
           {[
-            { label: 'Critical', value: feedStats.critical, color: 'text-freya-accent-red', bg: 'bg-freya-accent-red/10' },
-            { label: 'High', value: feedStats.high, color: 'text-orange-500', bg: 'bg-orange-500/10' },
-            { label: 'CISA KEV', value: feedStats.cisa, color: 'text-freya-accent-red', bg: 'bg-freya-accent-red/10' },
-            { label: 'CERT-FR', value: feedStats.certfr, color: 'text-freya-accent-blue', bg: 'bg-freya-accent-blue/10' },
-            { label: 'NVD', value: feedStats.nvd, color: 'text-freya-accent-purple', bg: 'bg-freya-accent-purple/10' },
-            { label: 'Exploits', value: feedStats.exploitdb, color: 'text-freya-accent-yellow', bg: 'bg-freya-accent-yellow/10' },
+            { label: 'Critical', value: feedStats.critical, color: 'text-freya-accent-red', bg: 'bg-freya-accent-red/10', isSource: false },
+            { label: 'High', value: feedStats.high, color: 'text-orange-500', bg: 'bg-orange-500/10', isSource: false },
+            { label: 'CISA KEV', value: feedStats.cisa, color: 'text-freya-accent-red', bg: 'bg-freya-accent-red/10', isSource: true },
+            { label: 'CERT-FR', value: feedStats.certfr, color: 'text-freya-accent-blue', bg: 'bg-freya-accent-blue/10', isSource: true },
+            { label: 'NVD', value: feedStats.nvd, color: 'text-freya-accent-purple', bg: 'bg-freya-accent-purple/10', isSource: true },
+            { label: 'Exploits', value: feedStats.exploitdb, color: 'text-freya-accent-yellow', bg: 'bg-freya-accent-yellow/10', isSource: true },
           ].map(stat => (
-            <div key={stat.label} className={clsx('p-3 rounded-lg', stat.bg)}>
-              <div className={clsx('text-2xl font-bold', stat.color)}>{stat.value}</div>
+            <div key={stat.label} className={clsx('p-3 rounded-lg relative', stat.bg)}>
+              <div className={clsx('text-2xl font-bold', stat.value === 0 && stat.isSource ? 'text-freya-text-muted' : stat.color)}>
+                {stat.value}
+              </div>
               <div className="text-xs text-freya-text-muted">{stat.label}</div>
+              {stat.value === 0 && stat.isSource && (
+                <div className="absolute top-1 right-1" title="Source unavailable or no data">
+                  <AlertTriangle className="w-3 h-3 text-freya-accent-yellow" />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -383,6 +390,26 @@ export function WatchPage() {
           <div className="flex flex-col items-center justify-center h-64 text-freya-text-muted">
             <ShieldCheck className="w-12 h-12 mb-4" />
             <p>No vulnerabilities match your filters</p>
+            {feedStats.total === 0 && (
+              <div className="mt-4 p-4 bg-freya-bg-tertiary rounded-lg text-center max-w-md">
+                <AlertCircle className="w-6 h-6 mx-auto mb-2 text-freya-accent-yellow" />
+                <p className="text-sm text-freya-text-secondary mb-2">
+                  Unable to fetch security feeds. This may be due to:
+                </p>
+                <ul className="text-xs text-freya-text-muted text-left space-y-1">
+                  <li>• Network connectivity issues</li>
+                  <li>• Source servers may be temporarily unavailable</li>
+                  <li>• Rate limiting from security feed providers</li>
+                </ul>
+                <button
+                  onClick={() => refreshMutation.mutate()}
+                  className="mt-3 btn-secondary text-sm"
+                >
+                  <RefreshCw className="w-4 h-4 mr-1 inline" />
+                  Retry
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-3">

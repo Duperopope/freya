@@ -1181,9 +1181,9 @@ export function SettingsPage() {
                           )}
                           <span className={clsx(
                             'badge',
-                            provider.enabled ? 'badge-blue' : 'badge-yellow'
+                            isReady ? 'badge-green' : needsKey ? 'badge-yellow' : 'badge-red'
                           )}>
-                            {provider.enabled ? 'Enabled' : 'Disabled'}
+                            {isReady ? 'Ready' : needsKey ? 'Needs Key' : 'Disabled'}
                           </span>
                         </div>
                       </div>

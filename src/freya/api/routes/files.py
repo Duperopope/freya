@@ -261,6 +261,46 @@ async def delete_file(request: Request, path: str) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to delete: {e}")
 
 
+class RenameRequest(BaseModel):
+    """Request to rename a file."""
+    path: str = Field(..., description="Current file path")
+    new_name: str = Field(..., description="New file name")
+
+
+@router.post("/rename")
+async def rename_file(request: Request, body: RenameRequest) -> dict[str, Any]:
+    """Rename a file."""
+    state = request.app.state.freya
+    
+    if not state.ready:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    base = state.config.output_root.resolve()
+    file_path = _validate_path(base, body.path)
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Validate new name
+    if '/' in body.new_name or '\\' in body.new_name:
+        raise HTTPException(status_code=400, detail="New name cannot contain path separators")
+    
+    new_path = file_path.parent / body.new_name
+    
+    if new_path.exists():
+        raise HTTPException(status_code=409, detail="A file with that name already exists")
+    
+    try:
+        file_path.rename(new_path)
+        return {
+            "success": True, 
+            "old_path": body.path,
+            "new_path": str(new_path.relative_to(base))
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to rename: {e}")
+
+
 @router.post("/search", response_model=list[SearchResult])
 async def search_files(request: Request, body: SearchRequest) -> list[SearchResult]:
     """Search for files by name or content."""
