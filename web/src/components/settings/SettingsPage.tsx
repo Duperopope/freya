@@ -35,13 +35,16 @@ import {
   Cloud,
   AlertCircle,
   CheckCircle2,
-  TrendingUp
+  TrendingUp,
+  Globe,
+  RotateCcw,
+  Sliders
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import * as api from '../../lib/api'
 
-type SettingsTab = 'paths' | 'ollama' | 'routing' | 'providers' | 'prompts' | 'api' | 'appearance' | 'about'
+type SettingsTab = 'global' | 'paths' | 'ollama' | 'routing' | 'providers' | 'prompts' | 'api' | 'appearance' | 'about'
 
 interface TabDef {
   id: SettingsTab
@@ -51,6 +54,7 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
+  { id: 'global', name: 'Global', icon: Globe, description: 'General settings & defaults' },
   { id: 'paths', name: 'Paths', icon: Folder, description: 'Configure directory paths' },
   { id: 'ollama', name: 'Ollama', icon: Server, description: 'LLM server connection' },
   { id: 'routing', name: 'Model Routing', icon: Brain, description: 'Per-role model assignment' },
@@ -78,9 +82,22 @@ const FONTS = [
   { id: 'source', name: 'Source Sans', family: '"Source Sans Pro", sans-serif' },
 ]
 
+// Default global settings
+const DEFAULT_GLOBAL_SETTINGS = {
+  webSearchEnabled: true,
+  continuousMode: true,
+  autoSwitch: true,
+  defaultTrials: 5,
+  analystPanelVisible: true,
+  hybridThreshold: 20,
+  localMinScore: 70,
+  fallbackChain: ['groq', 'hf', 'together', 'local'],
+  maxRetries: 3,
+}
+
 export function SettingsPage() {
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<SettingsTab>('paths')
+  const [activeTab, setActiveTab] = useState<SettingsTab>('global')
   const [copiedPath, setCopiedPath] = useState<string | null>(null)
   const [selectedPrompt, setSelectedPrompt] = useState<string | null>(null)
   const [promptContent, setPromptContent] = useState('')
@@ -104,6 +121,17 @@ export function SettingsPage() {
   const [selectedTheme, setSelectedTheme] = useState('dark')
   const [selectedFont, setSelectedFont] = useState('inter')
   const [fontSize, setFontSize] = useState(14)
+  
+  // Global settings state
+  const [globalSettings, setGlobalSettings] = useState(DEFAULT_GLOBAL_SETTINGS)
+  
+  // Hybrid routing editable state
+  const [editedHybridConfig, setEditedHybridConfig] = useState({
+    threshold: 20,
+    localMinScore: 70,
+    fallbackChain: 'groq,hf,together,local',
+    maxRetries: 3,
+  })
 
   // Fetch paths
   const { data: paths } = useQuery({
@@ -191,6 +219,15 @@ export function SettingsPage() {
       refetchLocalRuntimes()
     },
   })
+  
+  // Update hybrid routing config mutation
+  const updateHybridConfigMutation = useMutation({
+    mutationFn: (config: { percent_threshold?: number; local_min_score?: number; fallback_chain?: string[]; max_retries?: number }) => 
+      api.updateHybridRoutingConfig(config),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hybridRouting'] })
+    },
+  })
 
   // Initialize edited paths when paths data loads
   useEffect(() => {
@@ -207,6 +244,43 @@ export function SettingsPage() {
     setSelectedTheme(savedTheme)
     setSelectedFont(savedFont)
     setFontSize(savedFontSize)
+  }, [])
+  
+  // Load global settings from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('freya_global_settings')
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        setGlobalSettings({ ...DEFAULT_GLOBAL_SETTINGS, ...parsed })
+      } catch {
+        // Ignore parsing errors
+      }
+    }
+  }, [])
+  
+  // Initialize edited hybrid config from API data
+  useEffect(() => {
+    if (hybridConfig) {
+      setEditedHybridConfig({
+        threshold: Math.round((hybridConfig.percent_threshold - 1) * 100),
+        localMinScore: hybridConfig.local_min_score,
+        fallbackChain: hybridConfig.fallback_chain.join(','),
+        maxRetries: hybridConfig.max_retries,
+      })
+    }
+  }, [hybridConfig])
+  
+  // Load provider keys from localStorage on mount
+  useEffect(() => {
+    const savedProviderKeys = localStorage.getItem('freya_provider_keys')
+    if (savedProviderKeys) {
+      try {
+        setProviderKeys(JSON.parse(savedProviderKeys))
+      } catch {
+        // Ignore parsing errors
+      }
+    }
   }, [])
   
   // Apply theme in real-time with CSS variables
@@ -338,6 +412,74 @@ export function SettingsPage() {
     localStorage.setItem('freya_api_keys', JSON.stringify(apiKeys))
     alert('API keys saved locally')
   }
+  
+  // Save global settings
+  const saveGlobalSettings = (newSettings: typeof globalSettings) => {
+    setGlobalSettings(newSettings)
+    localStorage.setItem('freya_global_settings', JSON.stringify(newSettings))
+  }
+  
+  // Reset all settings to defaults
+  const resetAllToDefaults = () => {
+    if (confirm('Reset all settings to defaults? This cannot be undone.')) {
+      // Reset global settings
+      setGlobalSettings(DEFAULT_GLOBAL_SETTINGS)
+      localStorage.setItem('freya_global_settings', JSON.stringify(DEFAULT_GLOBAL_SETTINGS))
+      
+      // Reset appearance
+      setSelectedTheme('dark')
+      setSelectedFont('inter')
+      setFontSize(14)
+      localStorage.setItem('freya_theme', 'dark')
+      localStorage.setItem('freya_font', 'inter')
+      localStorage.setItem('freya_font_size', '14')
+      
+      // Reset hybrid config
+      setEditedHybridConfig({
+        threshold: 20,
+        localMinScore: 70,
+        fallbackChain: 'groq,hf,together,local',
+        maxRetries: 3,
+      })
+      
+      // Clear provider keys from local state (keep backend intact)
+      setProviderKeys({})
+      localStorage.removeItem('freya_provider_keys')
+      
+      alert('All settings reset to defaults')
+    }
+  }
+  
+  // Save hybrid routing config
+  const saveHybridConfig = () => {
+    const config = {
+      percent_threshold: 1 + (editedHybridConfig.threshold / 100),
+      local_min_score: editedHybridConfig.localMinScore,
+      fallback_chain: editedHybridConfig.fallbackChain.split(',').map(s => s.trim()).filter(Boolean),
+      max_retries: editedHybridConfig.maxRetries,
+    }
+    updateHybridConfigMutation.mutate(config)
+    
+    // Also save to global settings
+    saveGlobalSettings({
+      ...globalSettings,
+      hybridThreshold: editedHybridConfig.threshold,
+      localMinScore: editedHybridConfig.localMinScore,
+      fallbackChain: config.fallback_chain,
+      maxRetries: editedHybridConfig.maxRetries,
+    })
+  }
+  
+  // Save provider key with persistence
+  const saveProviderKey = (providerId: string, key: string) => {
+    // Update backend
+    updateProviderKeyMutation.mutate({ provider: providerId, apiKey: key })
+    
+    // Also persist to localStorage for recovery
+    const newKeys = { ...providerKeys, [providerId]: key ? '***saved***' : '' }
+    setProviderKeys(prev => ({ ...prev, [providerId]: '' }))
+    localStorage.setItem('freya_provider_keys', JSON.stringify(newKeys))
+  }
 
   // Load API keys from localStorage on mount
   useEffect(() => {
@@ -391,6 +533,246 @@ export function SettingsPage() {
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-3xl mx-auto">
+          {/* Global Tab */}
+          {activeTab === 'global' && (
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <h3 className="text-xl font-semibold text-freya-text-primary mb-2">Global Settings</h3>
+                <p className="text-freya-text-muted">
+                  Configure application-wide defaults. Settings are saved between sessions.
+                </p>
+              </div>
+
+              {/* Reset to Defaults */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-freya-accent-red/20 flex items-center justify-center">
+                      <RotateCcw className="w-5 h-5 text-freya-accent-red" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-freya-text-primary">Reset All Settings</h4>
+                      <p className="text-sm text-freya-text-muted">Restore all settings to factory defaults</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={resetAllToDefaults}
+                    className="btn-danger px-4 py-2 flex items-center gap-2"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Reset Defaults
+                  </button>
+                </div>
+              </div>
+
+              {/* Chat Defaults */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <h4 className="font-medium text-freya-text-primary mb-4 flex items-center gap-2">
+                  <Sliders className="w-5 h-5 text-freya-accent-blue" />
+                  Chat Defaults
+                </h4>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-freya-bg-primary rounded-lg">
+                    <div>
+                      <div className="font-medium text-freya-text-primary">Web Search</div>
+                      <div className="text-sm text-freya-text-muted">Enable web search by default</div>
+                    </div>
+                    <button
+                      onClick={() => saveGlobalSettings({ ...globalSettings, webSearchEnabled: !globalSettings.webSearchEnabled })}
+                      className={clsx(
+                        'relative w-12 h-6 rounded-full transition-colors',
+                        globalSettings.webSearchEnabled ? 'bg-freya-accent-green' : 'bg-freya-bg-tertiary'
+                      )}
+                    >
+                      <div className={clsx(
+                        'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform',
+                        globalSettings.webSearchEnabled ? 'translate-x-7' : 'translate-x-1'
+                      )} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bench Defaults */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <h4 className="font-medium text-freya-text-primary mb-4 flex items-center gap-2">
+                  <Sliders className="w-5 h-5 text-freya-accent-purple" />
+                  Benchmark Defaults
+                </h4>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-freya-bg-primary rounded-lg">
+                    <div>
+                      <div className="font-medium text-freya-text-primary">Continuous Mode</div>
+                      <div className="text-sm text-freya-text-muted">Run benchmarks in continuous mode by default</div>
+                    </div>
+                    <button
+                      onClick={() => saveGlobalSettings({ ...globalSettings, continuousMode: !globalSettings.continuousMode })}
+                      className={clsx(
+                        'relative w-12 h-6 rounded-full transition-colors',
+                        globalSettings.continuousMode ? 'bg-freya-accent-green' : 'bg-freya-bg-tertiary'
+                      )}
+                    >
+                      <div className={clsx(
+                        'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform',
+                        globalSettings.continuousMode ? 'translate-x-7' : 'translate-x-1'
+                      )} />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-freya-bg-primary rounded-lg">
+                    <div>
+                      <div className="font-medium text-freya-text-primary">Auto-Switch Intelligent</div>
+                      <div className="text-sm text-freya-text-muted">Automatically switch models based on performance</div>
+                    </div>
+                    <button
+                      onClick={() => saveGlobalSettings({ ...globalSettings, autoSwitch: !globalSettings.autoSwitch })}
+                      className={clsx(
+                        'relative w-12 h-6 rounded-full transition-colors',
+                        globalSettings.autoSwitch ? 'bg-freya-accent-green' : 'bg-freya-bg-tertiary'
+                      )}
+                    >
+                      <div className={clsx(
+                        'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform',
+                        globalSettings.autoSwitch ? 'translate-x-7' : 'translate-x-1'
+                      )} />
+                    </button>
+                  </div>
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <div className="font-medium text-freya-text-primary">Default Trials</div>
+                        <div className="text-sm text-freya-text-muted">Number of trials per benchmark category</div>
+                      </div>
+                      <span className="badge badge-blue">{globalSettings.defaultTrials}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      value={globalSettings.defaultTrials}
+                      onChange={(e) => saveGlobalSettings({ ...globalSettings, defaultTrials: parseInt(e.target.value) })}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-freya-text-muted mt-1">
+                      <span>1</span>
+                      <span>5</span>
+                      <span>10</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* BMAD Studio Defaults */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <h4 className="font-medium text-freya-text-primary mb-4 flex items-center gap-2">
+                  <Sliders className="w-5 h-5 text-freya-accent-cyan" />
+                  BMAD Studio Defaults
+                </h4>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-freya-bg-primary rounded-lg">
+                    <div>
+                      <div className="font-medium text-freya-text-primary">Analyst Panel Visible</div>
+                      <div className="text-sm text-freya-text-muted">Show analyst panel by default</div>
+                    </div>
+                    <button
+                      onClick={() => saveGlobalSettings({ ...globalSettings, analystPanelVisible: !globalSettings.analystPanelVisible })}
+                      className={clsx(
+                        'relative w-12 h-6 rounded-full transition-colors',
+                        globalSettings.analystPanelVisible ? 'bg-freya-accent-green' : 'bg-freya-bg-tertiary'
+                      )}
+                    >
+                      <div className={clsx(
+                        'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform',
+                        globalSettings.analystPanelVisible ? 'translate-x-7' : 'translate-x-1'
+                      )} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Hybrid Routing Configuration */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-medium text-freya-text-primary flex items-center gap-2">
+                    <Brain className="w-5 h-5 text-freya-accent-yellow" />
+                    Hybrid Routing Configuration
+                  </h4>
+                  <button
+                    onClick={saveHybridConfig}
+                    disabled={updateHybridConfigMutation.isPending}
+                    className="btn-primary px-3 py-1.5 text-sm flex items-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <label className="block text-sm text-freya-text-muted mb-2">Threshold (% better)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={editedHybridConfig.threshold}
+                      onChange={(e) => setEditedHybridConfig(prev => ({ ...prev, threshold: parseInt(e.target.value) || 0 }))}
+                      className="input w-full"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">Remote must be X% better than local</p>
+                  </div>
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <label className="block text-sm text-freya-text-muted mb-2">Local Min Score</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={editedHybridConfig.localMinScore}
+                      onChange={(e) => setEditedHybridConfig(prev => ({ ...prev, localMinScore: parseInt(e.target.value) || 0 }))}
+                      className="input w-full"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">Minimum local score to use local</p>
+                  </div>
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <label className="block text-sm text-freya-text-muted mb-2">Fallback Chain</label>
+                    <input
+                      type="text"
+                      value={editedHybridConfig.fallbackChain}
+                      onChange={(e) => setEditedHybridConfig(prev => ({ ...prev, fallbackChain: e.target.value }))}
+                      className="input w-full font-mono text-sm"
+                      placeholder="groq,hf,together,local"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">Comma-separated provider order</p>
+                  </div>
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <label className="block text-sm text-freya-text-muted mb-2">Max Retries</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={editedHybridConfig.maxRetries}
+                      onChange={(e) => setEditedHybridConfig(prev => ({ ...prev, maxRetries: parseInt(e.target.value) || 1 }))}
+                      className="input w-full"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">Retries before fallback</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Info */}
+              <div className="p-4 bg-freya-bg-tertiary rounded-lg border border-freya-border">
+                <div className="flex items-start gap-3">
+                  <Info className="w-5 h-5 text-freya-accent-blue mt-0.5" />
+                  <div className="text-sm text-freya-text-secondary">
+                    <p className="font-medium text-freya-text-primary mb-1">Session Persistence</p>
+                    <p>
+                      All settings on this page are automatically saved to your browser's local storage
+                      and will persist between sessions. Changes to Hybrid Routing require a save to
+                      update the backend configuration.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Paths Tab */}
           {activeTab === 'paths' && (
             <div className="space-y-6 animate-fade-in">
@@ -746,19 +1128,42 @@ export function SettingsPage() {
                   </button>
                 </div>
                 
+                {/* Provider Status Legend */}
+                <div className="mb-4 p-3 bg-freya-bg-tertiary rounded-lg text-xs text-freya-text-muted">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-full bg-freya-accent-green" />
+                      <span>Ready (API key configured)</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-full bg-freya-accent-yellow" />
+                      <span>Available (needs API key)</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-full bg-freya-text-muted" />
+                      <span>Disabled</span>
+                    </div>
+                  </div>
+                </div>
+                
                 <div className="space-y-3">
-                  {providers && Object.entries(providers).map(([id, provider]) => (
+                  {providers && Object.entries(providers).map(([id, provider]) => {
+                    const isReady = provider.enabled && provider.has_api_key
+                    const needsKey = provider.enabled && !provider.has_api_key
+                    
+                    return (
                     <div key={id} className="p-4 bg-freya-bg-primary rounded-lg border border-freya-border">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <div className={clsx(
                             'w-10 h-10 rounded-lg flex items-center justify-center',
-                            provider.enabled && provider.has_api_key 
-                              ? 'bg-freya-accent-green/20' 
-                              : 'bg-freya-bg-tertiary'
+                            isReady ? 'bg-freya-accent-green/20' : 
+                            needsKey ? 'bg-freya-accent-yellow/20' : 'bg-freya-bg-tertiary'
                           )}>
-                            {provider.has_api_key ? (
+                            {isReady ? (
                               <CheckCircle2 className="w-5 h-5 text-freya-accent-green" />
+                            ) : needsKey ? (
+                              <Key className="w-5 h-5 text-freya-accent-yellow" />
                             ) : (
                               <AlertCircle className="w-5 h-5 text-freya-text-muted" />
                             )}
@@ -784,32 +1189,48 @@ export function SettingsPage() {
                       </div>
                       
                       {/* API Key Input */}
-                      <div className="flex items-center gap-2 mb-3">
-                        <input
-                          type={showProviderKey[id] ? 'text' : 'password'}
-                          value={providerKeys[id] || ''}
-                          onChange={(e) => setProviderKeys(prev => ({ ...prev, [id]: e.target.value }))}
-                          placeholder={provider.has_api_key ? '••••••••••••••••' : 'Enter API key...'}
-                          className="input flex-1 font-mono text-sm"
-                        />
-                        <button
-                          onClick={() => setShowProviderKey(prev => ({ ...prev, [id]: !prev[id] }))}
-                          className="btn-ghost px-2"
-                        >
-                          {showProviderKey[id] ? 'Hide' : 'Show'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (providerKeys[id]) {
-                              updateProviderKeyMutation.mutate({ provider: id, apiKey: providerKeys[id] })
-                              setProviderKeys(prev => ({ ...prev, [id]: '' }))
-                            }
-                          }}
-                          disabled={!providerKeys[id] || updateProviderKeyMutation.isPending}
-                          className="btn-primary px-3"
-                        >
-                          <Save className="w-4 h-4" />
-                        </button>
+                      <div className="space-y-2 mb-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type={showProviderKey[id] ? 'text' : 'password'}
+                            value={providerKeys[id] || ''}
+                            onChange={(e) => setProviderKeys(prev => ({ ...prev, [id]: e.target.value }))}
+                            placeholder={provider.has_api_key ? '••••••••••••••••' : 'Enter API key...'}
+                            className={clsx(
+                              'input flex-1 font-mono text-sm',
+                              provider.has_api_key && 'border-freya-accent-green/50'
+                            )}
+                          />
+                          <button
+                            onClick={() => setShowProviderKey(prev => ({ ...prev, [id]: !prev[id] }))}
+                            className="btn-ghost px-2"
+                          >
+                            {showProviderKey[id] ? 'Hide' : 'Show'}
+                          </button>
+                          <button
+                            onClick={() => saveProviderKey(id, providerKeys[id] || '')}
+                            disabled={!providerKeys[id] || updateProviderKeyMutation.isPending}
+                            className="btn-primary px-3"
+                          >
+                            {updateProviderKeyMutation.isPending ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Save className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                        {provider.has_api_key && (
+                          <div className="text-xs text-freya-accent-green flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            API key configured and saved
+                          </div>
+                        )}
+                        {!provider.has_api_key && provider.enabled && (
+                          <div className="text-xs text-freya-accent-yellow flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            API key required to enable this provider
+                          </div>
+                        )}
                       </div>
                       
                       {/* Rate Limits */}
@@ -848,7 +1269,7 @@ export function SettingsPage() {
                         </div>
                       )}
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
 

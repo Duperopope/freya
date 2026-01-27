@@ -288,7 +288,7 @@ async def get_env_vars() -> dict[str, str | None]:
 async def get_version() -> dict[str, str]:
     """Get Freya version information."""
     return {
-        "version": "2.3.0",
+        "version": "2.3.1",
         "api_version": "2.3",
         "python_version": f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}",
     }
@@ -315,6 +315,50 @@ async def get_hybrid_routing_config(request: Request) -> dict[str, Any]:
         "health_check_interval_min": cfg.health_check_interval_min,
         "max_retries": cfg.max_retries,
         "quota_cache_sec": cfg.quota_cache_sec,
+    }
+
+
+class HybridRoutingUpdateRequest(BaseModel):
+    """Request to update hybrid routing configuration."""
+    enabled: bool | None = None
+    percent_threshold: float | None = None
+    local_min_score: int | None = None
+    fallback_chain: list[str] | None = None
+    max_retries: int | None = None
+
+
+@router.post("/hybrid-routing")
+async def update_hybrid_routing_config(request: Request, body: HybridRoutingUpdateRequest) -> dict[str, Any]:
+    """Update hybrid routing configuration."""
+    state = request.app.state.freya
+    
+    if not state.ready or not state.config:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    cfg = state.config.hybrid_routing
+    
+    # Update only provided fields
+    if body.enabled is not None:
+        cfg.enabled = body.enabled
+    if body.percent_threshold is not None:
+        cfg.percent_threshold = body.percent_threshold
+    if body.local_min_score is not None:
+        cfg.local_min_score = body.local_min_score
+    if body.fallback_chain is not None:
+        cfg.fallback_chain = body.fallback_chain
+    if body.max_retries is not None:
+        cfg.max_retries = body.max_retries
+    
+    return {
+        "success": True,
+        "message": "Hybrid routing configuration updated",
+        "config": {
+            "enabled": cfg.enabled,
+            "percent_threshold": cfg.percent_threshold,
+            "local_min_score": cfg.local_min_score,
+            "fallback_chain": cfg.fallback_chain,
+            "max_retries": cfg.max_retries,
+        }
     }
 
 

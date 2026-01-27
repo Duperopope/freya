@@ -291,8 +291,7 @@ export function ChatPage() {
       const newHat: api.HatPreset = {
         name: newHatName.trim().toLowerCase().replace(/\s+/g, '_'),
         description: newHatDescription.trim() || `Custom ${newHatName} personality`,
-        system_prompt: newHatDescription.trim(),
-        temperature: 0.7
+        system_prompt: newHatDescription.trim()
       }
       setCustomHats(prev => [...prev, newHat])
       setNewHatName('')

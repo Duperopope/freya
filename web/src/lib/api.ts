@@ -560,6 +560,15 @@ export async function getHybridRoutingConfig(): Promise<HybridRoutingConfig> {
   return handleResponse(res)
 }
 
+export async function updateHybridRoutingConfig(config: Partial<HybridRoutingConfig>): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/settings/hybrid-routing`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  })
+  return handleResponse(res)
+}
+
 export async function getProviders(): Promise<Record<string, ProviderConfig>> {
   const res = await fetch(`${API_BASE}/settings/providers`)
   return handleResponse(res)

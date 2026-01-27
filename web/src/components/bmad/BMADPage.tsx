@@ -36,7 +36,6 @@ import {
   Repeat,
   Timer,
   Activity,
-  ChevronLeft,
   FolderOpen,
   History,
   PanelLeftClose,

@@ -71,7 +71,7 @@ export function StatusBar() {
 
       {/* Right side */}
       <div className="flex items-center gap-4 text-freya-text-muted">
-        <span className="font-medium">Freya v2.3.0</span>
+        <span className="font-medium">Freya v2.3.1</span>
         <div className="flex items-center gap-1.5">
           <Clock className="w-3.5 h-3.5" />
           <span>{time.toLocaleTimeString()}</span>
