@@ -161,13 +161,12 @@ class BMADRuntime:
             }
     
     def load_state(self, state: dict[str, Any]) -> None:
-        """Load state from persistence."""
+        """Load state from persistence (for resume). Does NOT change running status."""
         with self._lock:
-            self._project_name = state.get("project_name", "")
-            self._goal = state.get("goal", "")
-            self._completed = state.get("completed_agents", [])
-            self._artifacts = state.get("artifacts", [])
-            self._error = state.get("error")
+            # Only load completed agents and artifacts, keep current running state
+            self._completed = list(state.get("completed_agents", []))
+            self._artifacts = list(state.get("artifacts", []))
+            # Don't load error - we're resuming fresh
 
 
 _bmad_runtime = BMADRuntime()
@@ -260,14 +259,29 @@ async def run_bmad_workflow(
     if not state.ready:
         raise HTTPException(status_code=503, detail="Service not ready")
     
-    if not _bmad_runtime.start(project_name=body.project_name, goal=body.goal):
-        raise HTTPException(status_code=409, detail="BMAD workflow already running")
-    
-    # Determine output directory
+    # Determine output directory FIRST to check for resume state
     if body.output_dir:
         output_dir = Path(body.output_dir)
     else:
         output_dir = state.config.output_root / body.project_name
+    
+    # Check for resume state BEFORE starting
+    resume_state: dict[str, Any] = {}
+    state_file = output_dir / ".bmad_state.json"
+    if state_file.exists():
+        try:
+            resume_state = json.loads(state_file.read_text(encoding="utf-8"))
+            logger.info(f"[BMAD] Found resume state: {resume_state.get('completed_agents', [])}")
+        except Exception as e:
+            logger.warning(f"[BMAD] Failed to load resume state: {e}")
+    
+    if not _bmad_runtime.start(project_name=body.project_name, goal=body.goal):
+        raise HTTPException(status_code=409, detail="BMAD workflow already running")
+    
+    # Load previous completed agents into runtime AFTER start
+    if resume_state.get("completed_agents"):
+        _bmad_runtime.load_state(resume_state)
+        logger.info(f"[BMAD] Loaded {len(resume_state['completed_agents'])} completed agents for resume")
     
     def run_workflow():
         """Background BMAD runner with detailed logging."""
@@ -304,21 +318,14 @@ async def run_bmad_workflow(
             
             log_and_broadcast("info", f"📁 Dossier de sortie: {output_dir}")
             
-            # Save pipeline state for resume capability
+            # State file for persistence
             state_file = output_dir / ".bmad_state.json"
             
-            # Check if we should resume from a previous run
-            already_completed: list[str] = []
-            if state_file.exists():
-                try:
-                    saved_state = json.loads(state_file.read_text(encoding="utf-8"))
-                    already_completed = saved_state.get("completed_agents", [])
-                    if already_completed:
-                        log_and_broadcast("info", f"🔄 Reprise du projet - {len(already_completed)} agents déjà complétés")
-                        log_and_broadcast("info", f"✓ Agents complétés: {', '.join(already_completed)}")
-                except Exception as e:
-                    logger.warning(f"Failed to load previous state: {e}")
-                    already_completed = []
+            # Get already completed agents from runtime (loaded before workflow started)
+            already_completed = _bmad_runtime.status.get("agents_completed", [])
+            if already_completed:
+                log_and_broadcast("info", f"🔄 Reprise du projet - {len(already_completed)} agents déjà complétés")
+                log_and_broadcast("info", f"✓ Agents complétés: {', '.join(already_completed)}")
             
             # Agent execution sequence with descriptions
             agents = [
@@ -332,28 +339,23 @@ async def run_bmad_workflow(
                 ("runner", "🚀 Test Runner", "Lance et valide l'application"),
             ]
             
-            max_fix_cycles = 3  # Maximum Dev→QA→Runner cycles
+            max_fix_cycles = 5  # Maximum Dev→QA→Runner cycles
             current_cycle = 0
+            app_validated = False
             
-            for idx, (agent_name, agent_label, agent_desc) in enumerate(agents):
-                # Skip already completed agents (resume mode)
-                if agent_name in already_completed:
-                    log_and_broadcast("info", f"⏭️ {agent_label} déjà complété, on passe au suivant", agent_name)
-                    _bmad_runtime.complete_agent(agent_name)
-                    continue
+            # Helper to run an agent
+            def run_agent(agent_name: str, agent_label: str, agent_desc: str, goal_override: str | None = None) -> tuple[Path | None, bool]:
+                """Run a single agent. Returns (artifact_path, success)."""
                 _bmad_runtime.set_agent(agent_name)
                 log_and_broadcast("info", f"▶️ {agent_label} - {agent_desc}", agent_name)
+                idx = next((i for i, a in enumerate(agents) if a[0] == agent_name), 0)
                 broadcast("agent_start", {"agent": agent_name, "progress": (idx / len(agents)) * 100})
                 
-                start_time = time.time()
-                
+                agent_start = time.time()
                 try:
-                    # Run agent
-                    artifact_path = _run_single_agent(state, agent_name, body.goal, output_dir)
+                    artifact_path = _run_single_agent(state, agent_name, goal_override or body.goal, output_dir)
+                    elapsed = time.time() - agent_start
                     
-                    elapsed = time.time() - start_time
-                    
-                    # Log artifact details
                     if artifact_path.exists():
                         content = artifact_path.read_text(encoding="utf-8")
                         preview = content[:500] + "..." if len(content) > 500 else content
@@ -363,80 +365,95 @@ async def run_bmad_workflow(
                             agent_name,
                             {"artifact": str(artifact_path.name), "preview": preview, "size": len(content)}
                         )
-                        
-                        # Check if Runner agent detected failures - trigger fix cycle
-                        if agent_name == "runner" and current_cycle < max_fix_cycles:
-                            if "❌" in content or "FAIL" in content:
-                                current_cycle += 1
-                                log_and_broadcast(
-                                    "info",
-                                    f"🔄 Cycle de correction {current_cycle}/{max_fix_cycles} - Des erreurs ont été détectées",
-                                    "system"
-                                )
-                                
-                                # Re-run Dev with fix instructions
-                                fix_goal = f"""
-FIX THE FOLLOWING ISSUES from the test runner report:
-
-{content[:2000]}
-
-Original goal: {body.goal}
-
-Fix the code to make all tests pass.
-"""
-                                log_and_broadcast("info", "🔧 Relance du Développeur pour corriger les erreurs", "dev")
-                                _run_single_agent(state, "dev", fix_goal, output_dir)
-                                
-                                log_and_broadcast("info", "🔍 Relance du QA pour vérifier les corrections", "qa")
-                                _run_single_agent(state, "qa", body.goal, output_dir)
-                                
-                                log_and_broadcast("info", "🚀 Relance du Runner pour valider", "runner")
-                                artifact_path = _run_single_agent(state, "runner", body.goal, output_dir)
-                                
-                                # Check again
-                                content = artifact_path.read_text(encoding="utf-8")
-                                if "✅ ALL CHECKS PASSED" in content:
-                                    log_and_broadcast("success", f"🎉 Toutes les vérifications passent après {current_cycle} cycle(s) de correction!", "system")
                     else:
                         log_and_broadcast("success", f"✅ {agent_label} terminé en {elapsed:.1f}s", agent_name)
                     
                     _bmad_runtime.complete_agent(agent_name, str(artifact_path))
-                    broadcast("agent_done", {
-                        "agent": agent_name,
-                        "artifact": str(artifact_path),
-                        "elapsed_seconds": elapsed
-                    })
-                    
-                    # Save state for resume
+                    broadcast("agent_done", {"agent": agent_name, "artifact": str(artifact_path), "elapsed_seconds": elapsed})
                     state_file.write_text(json.dumps(_bmad_runtime.get_state_for_persistence(), indent=2))
+                    return artifact_path, True
                     
                 except Exception as e:
-                    elapsed = time.time() - start_time
+                    elapsed = time.time() - agent_start
                     error_msg = f"{agent_name}: {str(e)}"
                     logger.error(f"Agent {agent_name} failed: {e}", exc_info=True)
-                    
-                    log_and_broadcast(
-                        "error", 
-                        f"❌ {agent_label} a échoué après {elapsed:.1f}s: {str(e)[:200]}",
-                        agent_name,
-                        {"error": str(e), "traceback": str(e.__traceback__) if e.__traceback__ else None}
-                    )
-                    
+                    log_and_broadcast("error", f"❌ {agent_label} a échoué après {elapsed:.1f}s: {str(e)[:200]}", agent_name)
                     _bmad_runtime.set_error(error_msg)
                     broadcast("agent_error", {"agent": agent_name, "error": str(e)})
-                    
-                    # Save state even on error
                     state_file.write_text(json.dumps(_bmad_runtime.get_state_for_persistence(), indent=2))
-                    # Continue with next agent (continuous mode)
+                    return None, False
+            
+            # Phase 1: Run all design agents (analyst → sm)
+            design_agents = [a for a in agents if a[0] in ("analyst", "pm", "architect", "po", "sm")]
+            for agent_name, agent_label, agent_desc in design_agents:
+                if agent_name in already_completed:
+                    log_and_broadcast("info", f"⏭️ {agent_label} déjà complété", agent_name)
+                    continue
+                run_agent(agent_name, agent_label, agent_desc)
+            
+            # Phase 2: Dev → QA → Runner loop until validated or max cycles
+            while not app_validated and current_cycle < max_fix_cycles:
+                current_cycle += 1
+                log_and_broadcast("info", f"🔄 === Cycle de validation {current_cycle}/{max_fix_cycles} ===", "system")
+                
+                # Run Dev (or re-run with fixes)
+                dev_goal = body.goal
+                if current_cycle > 1:
+                    # Load previous QA/Runner report for context
+                    qa_report = output_dir / "QA.md"
+                    runner_report = output_dir / "runner-report.md"
+                    fix_context = ""
+                    if runner_report.exists():
+                        fix_context += f"\n\nPrevious Runner Report:\n{runner_report.read_text()[:2000]}"
+                    if qa_report.exists():
+                        fix_context += f"\n\nPrevious QA Report:\n{qa_report.read_text()[:2000]}"
+                    
+                    dev_goal = f"""
+FIX THE ISSUES from previous validation cycle {current_cycle - 1}:
+{fix_context}
+
+ORIGINAL GOAL: {body.goal}
+
+Fix all errors and make the application work correctly.
+Create/update the necessary files to pass all checks.
+"""
+                
+                dev_path, dev_ok = run_agent("dev", "💻 Développeur", "Génère/corrige le code", dev_goal)
+                if not dev_ok:
+                    log_and_broadcast("error", "Dev agent failed, trying again next cycle", "system")
+                    continue
+                
+                # Run QA
+                qa_path, qa_ok = run_agent("qa", "🔍 QA Engineer", "Teste et valide")
+                
+                # Run Runner
+                runner_path, runner_ok = run_agent("runner", "🚀 Test Runner", "Lance et valide l'application")
+                
+                # Check if app is validated
+                if runner_path and runner_path.exists():
+                    runner_content = runner_path.read_text(encoding="utf-8")
+                    if "✅ ALL CHECKS PASSED" in runner_content:
+                        app_validated = True
+                        log_and_broadcast("success", f"🎉 Application validée après {current_cycle} cycle(s)!", "system")
+                    else:
+                        log_and_broadcast("info", f"⚠️ Des problèmes détectés, cycle suivant...", "system")
+                elif qa_path and qa_path.exists():
+                    qa_content = qa_path.read_text(encoding="utf-8")
+                    if "OK" in qa_content and "FAIL" not in qa_content:
+                        app_validated = True
+                        log_and_broadcast("success", f"🎉 QA validé après {current_cycle} cycle(s)!", "system")
+            
+            if not app_validated:
+                log_and_broadcast("warning", f"⚠️ Application non validée après {max_fix_cycles} cycles. Vérifiez les logs.", "system")
             
             # Final summary
             completed = _bmad_runtime.status["agents_completed"]
             artifacts = _bmad_runtime.status["artifacts_generated"]
             
-            log_and_broadcast("info", f"🏁 Pipeline terminé: {len(completed)}/{len(agents)} agents complétés")
+            log_and_broadcast("info", f"🏁 Pipeline terminé: {len(set(completed))} agents uniques complétés")
             log_and_broadcast("info", f"📦 Artifacts générés: {len(artifacts)}")
-            if current_cycle > 0:
-                log_and_broadcast("info", f"🔄 Cycles de correction effectués: {current_cycle}")
+            log_and_broadcast("info", f"🔄 Cycles de validation effectués: {current_cycle}")
+            log_and_broadcast("info", f"✅ Application validée: {'Oui' if app_validated else 'Non'}")
             
             # List generated files
             all_files = list(output_dir.rglob("*"))

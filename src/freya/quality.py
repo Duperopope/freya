@@ -54,42 +54,69 @@ class QualityGate:
         """
         changed: list[Path] = []
         
-        # Pattern 1: FREYA_FULLFILE: path
-        pattern1 = r"FREYA_FULLFILE:\s*(.+?)\n```(?:\w+)?\n(.*?)\n```"
+        import logging
+        logger = logging.getLogger("freya.quality")
+        
+        # Pattern 1: FREYA_FULLFILE: path (flexible whitespace)
+        pattern1 = r"FREYA_FULLFILE:\s*([^\n]+?)\s*\n\s*```(?:\w*)\s*\n(.*?)```"
         matches = re.findall(pattern1, diff_text, flags=re.DOTALL)
+        logger.info(f"[Quality] Pattern 1 (FREYA_FULLFILE): found {len(matches)} matches")
         
         # Pattern 2: ```lang filename="path"
         if not matches:
-            pattern2 = r"```(?:\w+)?\s+filename=[\"'](.+?)[\"']\n(.*?)\n```"
+            pattern2 = r"```(?:\w*)\s+filename=[\"']([^\"']+)[\"']\s*\n(.*?)```"
             matches = re.findall(pattern2, diff_text, flags=re.DOTALL)
+            if matches:
+                logger.info(f"[Quality] Pattern 2 (filename=): found {len(matches)} matches")
         
         # Pattern 3: # File: path followed by code block
         if not matches:
-            pattern3 = r"#\s*File:\s*(.+?)\n```(?:\w+)?\n(.*?)\n```"
+            pattern3 = r"#\s*File:\s*([^\n]+?)\s*\n\s*```(?:\w*)\s*\n(.*?)```"
             matches = re.findall(pattern3, diff_text, flags=re.DOTALL)
+            if matches:
+                logger.info(f"[Quality] Pattern 3 (# File:): found {len(matches)} matches")
         
         # Pattern 4: **path** or `path` followed by code block  
         if not matches:
-            pattern4 = r"(?:\*\*|`)([a-zA-Z0-9_./\\-]+\.(?:py|js|ts|tsx|json|md|html|css|yaml|yml))(?:\*\*|`)\s*\n```(?:\w+)?\n(.*?)\n```"
+            pattern4 = r"(?:\*\*|`)([a-zA-Z0-9_./\\-]+\.(?:py|js|ts|tsx|json|md|html|css|yaml|yml))(?:\*\*|`)\s*\n\s*```(?:\w*)\s*\n(.*?)```"
             matches = re.findall(pattern4, diff_text, flags=re.DOTALL)
+            if matches:
+                logger.info(f"[Quality] Pattern 4 (bold/backtick path): found {len(matches)} matches")
         
-        # Pattern 5: Just look for any code blocks and infer filenames
+        # Pattern 5: Look for paths in text followed by code blocks
+        if not matches:
+            # More flexible: find paths like "src/main.py:" or "### src/main.py"
+            pattern5 = r"(?:^|\n)\s*(?:###?\s*)?([a-zA-Z0-9_./\\-]+\.(?:py|js|ts|tsx|json|md|html|css|yaml|yml|txt))\s*:?\s*\n\s*```(?:\w*)\s*\n(.*?)```"
+            matches = re.findall(pattern5, diff_text, flags=re.DOTALL)
+            if matches:
+                logger.info(f"[Quality] Pattern 5 (path heading): found {len(matches)} matches")
+        
+        # Pattern 6: Just look for any code blocks and infer filenames
         if not matches:
             # Find all code blocks with language hints
-            code_blocks = re.findall(r"```(\w+)\n(.*?)\n```", diff_text, flags=re.DOTALL)
+            code_blocks = re.findall(r"```(\w+)\s*\n(.*?)```", diff_text, flags=re.DOTALL)
+            logger.info(f"[Quality] Pattern 6 fallback: found {len(code_blocks)} code blocks")
             for i, (lang, content) in enumerate(code_blocks):
+                if not content.strip():
+                    continue
                 ext_map = {'python': 'py', 'javascript': 'js', 'typescript': 'ts', 'json': 'json', 'html': 'html', 'css': 'css'}
                 ext = ext_map.get(lang.lower(), lang.lower())
                 if ext in ('py', 'js', 'ts', 'tsx', 'json', 'html', 'css', 'yaml', 'yml'):
-                    filename = f"generated_{i+1}.{ext}"
+                    # Try to extract a filename from the content (e.g., first comment or class name)
+                    first_line = content.strip().split('\n')[0] if content.strip() else ''
+                    if 'main' in first_line.lower() or 'app' in first_line.lower():
+                        filename = f"main.{ext}"
+                    elif 'test' in first_line.lower():
+                        filename = f"test_app.{ext}"
+                    else:
+                        filename = f"module_{i+1}.{ext}"
                     matches.append((filename, content))
         
         if not matches:
-            # Log the raw output for debugging
-            import logging
-            logging.getLogger("freya.quality").warning(f"No code blocks found in DEV output. Raw output (first 500 chars):\n{diff_text[:500]}")
-            # Return empty instead of raising - the log will help debug
+            logger.warning(f"[Quality] No code blocks found in DEV output. Raw output (first 1000 chars):\n{diff_text[:1000]}")
             return []
+        
+        logger.info(f"[Quality] Total files to write: {len(matches)}")
 
         for rel, content in matches:
             rel = rel.strip().replace("\\", "/")
@@ -97,19 +124,27 @@ class QualityGate:
             while rel.startswith("/") or rel.startswith("./"):
                 rel = rel.lstrip("/").lstrip("./")
             if rel.startswith("../") or rel.startswith("..\\"):
-                continue  # Skip path traversal attempts
+                logger.warning(f"[Quality] Skipping path traversal: {rel}")
+                continue
             if not rel:
                 continue
+            
+            # Clean content - remove trailing ``` if present
+            content = content.rstrip()
+            if content.endswith("```"):
+                content = content[:-3].rstrip()
             
             p = (workspace_root / Path(rel)).resolve()
             try:
                 if workspace_root.resolve() not in p.parents and p != workspace_root.resolve():
-                    continue  # Skip files outside workspace
+                    logger.warning(f"[Quality] Skipping file outside workspace: {rel}")
+                    continue
             except (ValueError, OSError):
                 continue
             
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(content, encoding="utf-8")
+            logger.info(f"[Quality] Wrote file: {rel} ({len(content)} bytes)")
             changed.append(p)
         
         return changed

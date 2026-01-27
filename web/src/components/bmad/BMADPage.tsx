@@ -257,13 +257,18 @@ export function BMADPage() {
     queryKey: ['bmadStatus'],
     queryFn: api.getBMADStatus,
     refetchInterval: bmadProgress?.running ? 1000 : 10000,
+    staleTime: 1000, // Keep data fresh for 1 second
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   })
 
-  // Fetch artifacts
+  // Fetch artifacts - persist across tab changes
   const { data: artifacts, refetch: refetchArtifacts } = useQuery({
     queryKey: ['artifacts', projectName],
     queryFn: () => api.getArtifacts(projectName),
     refetchInterval: bmadProgress?.running ? 3000 : 30000,
+    staleTime: 30000, // Keep data fresh for 30 seconds
+    gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+    refetchOnWindowFocus: false, // Don't refetch when switching tabs
   })
 
   // Update store and mode when status changes
@@ -612,12 +617,18 @@ Répondez à ces questions ou posez-moi les vôtres !`,
     startMutation.mutate()
   }
 
-  // Export errors as JSON
-  const exportErrorsJSON = () => {
+  // Export all logs as JSON (errors + pipeline logs)
+  const exportLogsJSON = () => {
     const data = {
       project: projectName,
       goal: goal,
       exported_at: new Date().toISOString(),
+      status: {
+        running: status?.running ?? false,
+        current_agent: status?.current_agent,
+        completed_agents: status?.agents_completed ?? [],
+        artifacts_generated: status?.artifacts_generated ?? [],
+      },
       total_errors: pipelineErrors.length,
       errors: pipelineErrors.map(e => ({
         agent: e.agent,
@@ -625,17 +636,22 @@ Répondez à ces questions ou posez-moi les vôtres !`,
         timestamp: e.timestamp,
         stack: e.stack
       })),
-      agent_logs: agentLogs
+      pipeline_logs: bmadProgress?.logs ?? [],
+      agent_logs: agentLogs,
+      artifacts: artifacts ?? [],
     }
     
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `freya-bmad-errors-${projectName}-${format(new Date(), 'yyyy-MM-dd-HHmm')}.json`
+    a.download = `freya-bmad-logs-${projectName}-${format(new Date(), 'yyyy-MM-dd-HHmm')}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
+  
+  // Legacy alias for backward compatibility
+  const exportErrorsJSON = exportLogsJSON
 
   const isRunning = status?.running ?? false
   const completedAgents = status?.agents_completed ?? []
