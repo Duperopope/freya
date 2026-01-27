@@ -26,7 +26,6 @@ import {
   Network,
   Key,
   Github,
-  GitBranch,
   Edit3,
   FolderOpen,
   Moon,
@@ -38,13 +37,14 @@ import {
   TrendingUp,
   Globe,
   RotateCcw,
-  Sliders
+  Sliders,
+  Search
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import * as api from '../../lib/api'
 
-type SettingsTab = 'global' | 'paths' | 'ollama' | 'routing' | 'providers' | 'prompts' | 'api' | 'appearance' | 'about'
+type SettingsTab = 'global' | 'providers' | 'routing' | 'ollama' | 'paths' | 'prompts' | 'appearance' | 'about'
 
 interface TabDef {
   id: SettingsTab
@@ -53,10 +53,10 @@ interface TabDef {
   description: string
 }
 
+// Reordered tabs: Global > Providers & API Keys (merged) > Model Routing > Ollama > Paths > Prompts > Appearance > About
 const TABS: TabDef[] = [
   { id: 'global', name: 'Global', icon: Globe, description: 'General settings & defaults' },
-  { id: 'providers', name: 'Providers & Routing', icon: Cloud, description: 'LLM providers & hybrid routing' },
-  { id: 'api', name: 'API Keys', icon: Key, description: 'External API integrations' },
+  { id: 'providers', name: 'Providers & API Keys', icon: Cloud, description: 'LLM providers, routing & external APIs' },
   { id: 'routing', name: 'Model Routing', icon: Brain, description: 'Per-role model assignment' },
   { id: 'ollama', name: 'Ollama', icon: Server, description: 'LLM server connection' },
   { id: 'paths', name: 'Paths', icon: Folder, description: 'Configure directory paths' },
@@ -1351,6 +1351,90 @@ export function SettingsPage() {
                 </div>
               )}
 
+              {/* External API Keys Section - Merged from old API tab */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <h4 className="font-medium text-freya-text-primary mb-4 flex items-center gap-2">
+                  <Key className="w-5 h-5 text-freya-accent-cyan" />
+                  External API Keys
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* GitHub */}
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Github className="w-4 h-4 text-freya-text-primary" />
+                      <label className="text-sm font-medium text-freya-text-primary">GitHub Token</label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type={showApiKeys.github ? 'text' : 'password'}
+                        value={apiKeys.github_token}
+                        onChange={(e) => setApiKeys(prev => ({ ...prev, github_token: e.target.value }))}
+                        placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                        className="input flex-1 font-mono text-sm"
+                      />
+                      <button
+                        onClick={() => setShowApiKeys(prev => ({ ...prev, github: !prev.github }))}
+                        className="btn-ghost px-2 text-xs"
+                      >
+                        {showApiKeys.github ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Brave Search */}
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Search className="w-4 h-4 text-freya-accent-orange" />
+                      <label className="text-sm font-medium text-freya-text-primary">Brave Search (Optional)</label>
+                    </div>
+                    <input
+                      type={showApiKeys.brave ? 'text' : 'password'}
+                      value={apiKeys.brave_api_key}
+                      onChange={(e) => setApiKeys(prev => ({ ...prev, brave_api_key: e.target.value }))}
+                      placeholder="BSAxxxxxxxxxxxxxxxxxx"
+                      className="input font-mono text-sm"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">DuckDuckGo used by default</p>
+                  </div>
+                  
+                  {/* NVD API */}
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertCircle className="w-4 h-4 text-freya-accent-red" />
+                      <label className="text-sm font-medium text-freya-text-primary">NVD API Key (Optional)</label>
+                    </div>
+                    <input
+                      type={showApiKeys.nvd ? 'text' : 'password'}
+                      value={apiKeys.nvd_api_key}
+                      onChange={(e) => setApiKeys(prev => ({ ...prev, nvd_api_key: e.target.value }))}
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                      className="input font-mono text-sm"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">Higher rate limits for CVE lookups</p>
+                  </div>
+                  
+                  {/* SearXNG */}
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Globe className="w-4 h-4 text-freya-accent-purple" />
+                      <label className="text-sm font-medium text-freya-text-primary">SearXNG URL (Optional)</label>
+                    </div>
+                    <input
+                      type="text"
+                      value={apiKeys.searxng_url}
+                      onChange={(e) => setApiKeys(prev => ({ ...prev, searxng_url: e.target.value }))}
+                      placeholder="https://searx.example.com"
+                      className="input font-mono text-sm"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">Self-hosted search instance</p>
+                  </div>
+                </div>
+                <button onClick={saveApiKeys} className="btn-primary text-sm mt-4 flex items-center gap-2">
+                  <Save className="w-4 h-4" />
+                  Save External Keys
+                </button>
+              </div>
+
               {/* Info Box */}
               <div className="p-4 bg-freya-bg-tertiary rounded-lg border border-freya-border">
                 <div className="flex items-start gap-3">
@@ -1437,148 +1521,6 @@ export function SettingsPage() {
                   />
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* API Keys Tab */}
-          {activeTab === 'api' && (
-            <div className="space-y-6 animate-fade-in">
-              <div>
-                <h3 className="text-xl font-semibold text-freya-text-primary mb-2">API Integrations</h3>
-                <p className="text-freya-text-muted">
-                  Configure API keys for external services. Keys are stored locally and encrypted.
-                </p>
-              </div>
-
-              {/* GitHub Integration */}
-              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-lg bg-freya-bg-tertiary flex items-center justify-center">
-                    <Github className="w-5 h-5 text-freya-text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-freya-text-primary">GitHub</h4>
-                    <p className="text-sm text-freya-text-muted">Access repositories and security advisories</p>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm text-freya-text-secondary mb-2">Personal Access Token</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type={showApiKeys.github ? 'text' : 'password'}
-                        value={apiKeys.github_token}
-                        onChange={(e) => setApiKeys(prev => ({ ...prev, github_token: e.target.value }))}
-                        placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                        className="input flex-1 font-mono"
-                      />
-                      <button
-                        onClick={() => setShowApiKeys(prev => ({ ...prev, github: !prev.github }))}
-                        className="btn-secondary px-3"
-                      >
-                        {showApiKeys.github ? 'Hide' : 'Show'}
-                      </button>
-                    </div>
-                    <p className="text-xs text-freya-text-muted mt-1">
-                      Required scopes: repo, read:org, read:user
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* GitLab Integration */}
-              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-lg bg-freya-bg-tertiary flex items-center justify-center">
-                    <GitBranch className="w-5 h-5 text-freya-accent-orange" />
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-freya-text-primary">GitLab</h4>
-                    <p className="text-sm text-freya-text-muted">Access GitLab repositories</p>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm text-freya-text-secondary mb-2">GitLab URL</label>
-                    <input
-                      type="text"
-                      value={apiKeys.gitlab_url}
-                      onChange={(e) => setApiKeys(prev => ({ ...prev, gitlab_url: e.target.value }))}
-                      placeholder="https://gitlab.com"
-                      className="input font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-freya-text-secondary mb-2">Personal Access Token</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type={showApiKeys.gitlab ? 'text' : 'password'}
-                        value={apiKeys.gitlab_token}
-                        onChange={(e) => setApiKeys(prev => ({ ...prev, gitlab_token: e.target.value }))}
-                        placeholder="glpat-xxxxxxxxxxxxxxxxxxxx"
-                        className="input flex-1 font-mono"
-                      />
-                      <button
-                        onClick={() => setShowApiKeys(prev => ({ ...prev, gitlab: !prev.gitlab }))}
-                        className="btn-secondary px-3"
-                      >
-                        {showApiKeys.gitlab ? 'Hide' : 'Show'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Search APIs */}
-              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
-                <h4 className="font-medium text-freya-text-primary mb-4">Search & Security APIs</h4>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm text-freya-text-secondary mb-2">Brave Search API Key (Optional)</label>
-                    <input
-                      type={showApiKeys.brave ? 'text' : 'password'}
-                      value={apiKeys.brave_api_key}
-                      onChange={(e) => setApiKeys(prev => ({ ...prev, brave_api_key: e.target.value }))}
-                      placeholder="BSAxxxxxxxxxxxxxxxxxx"
-                      className="input font-mono"
-                    />
-                    <p className="text-xs text-freya-text-muted mt-1">
-                      Optional. DuckDuckGo is used by default (free, unlimited).
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-freya-text-secondary mb-2">NVD API Key (Optional)</label>
-                    <input
-                      type={showApiKeys.nvd ? 'text' : 'password'}
-                      value={apiKeys.nvd_api_key}
-                      onChange={(e) => setApiKeys(prev => ({ ...prev, nvd_api_key: e.target.value }))}
-                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                      className="input font-mono"
-                    />
-                    <p className="text-xs text-freya-text-muted mt-1">
-                      Higher rate limits for CVE lookups. Get one at nvd.nist.gov
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-freya-text-secondary mb-2">SearXNG Instance URL (Optional)</label>
-                    <input
-                      type="text"
-                      value={apiKeys.searxng_url}
-                      onChange={(e) => setApiKeys(prev => ({ ...prev, searxng_url: e.target.value }))}
-                      placeholder="https://searx.example.com"
-                      className="input font-mono"
-                    />
-                    <p className="text-xs text-freya-text-muted mt-1">
-                      Self-hosted SearXNG instance for privacy-focused search.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <button onClick={saveApiKeys} className="btn-primary flex items-center gap-2">
-                <Save className="w-4 h-4" />
-                Save API Keys
-              </button>
             </div>
           )}
 

@@ -29,7 +29,8 @@ import {
   Trash2,
   ExternalLink,
   Clipboard,
-  MoreVertical
+  MoreVertical,
+  FolderPlus
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
@@ -307,23 +308,116 @@ export function FilesPage() {
 
   // Breadcrumb parts
   const pathParts = currentPath ? currentPath.split('/').filter(Boolean) : []
+  
+  // Folder import state
+  const folderInputRef = useRef<HTMLInputElement>(null)
+  const [isImporting, setIsImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null)
+  
+  // Handle folder import for BMAD
+  const handleFolderImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (!files || files.length === 0) return
+    
+    setIsImporting(true)
+    setImportProgress({ current: 0, total: files.length })
+    
+    try {
+      const fileArray = Array.from(files)
+      
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i]
+        // Get relative path from webkitRelativePath
+        const relativePath = (file as any).webkitRelativePath || file.name
+        const targetPath = currentPath ? `${currentPath}/${relativePath}` : relativePath
+        
+        // Only import text-based files that BMAD can process
+        const ext = file.name.split('.').pop()?.toLowerCase()
+        const textExtensions = ['md', 'txt', 'json', 'yaml', 'yml', 'py', 'js', 'ts', 'tsx', 'jsx', 'css', 'html', 'xml', 'toml', 'ini', 'cfg', 'sql', 'sh']
+        
+        if (textExtensions.includes(ext || '')) {
+          try {
+            const content = await file.text()
+            await api.writeFile(targetPath, content)
+          } catch (error) {
+            console.warn(`Failed to import ${relativePath}:`, error)
+          }
+        }
+        
+        setImportProgress({ current: i + 1, total: files.length })
+      }
+      
+      // Refresh file listing
+      queryClient.invalidateQueries({ queryKey: ['files'] })
+      
+    } catch (error) {
+      console.error('Folder import failed:', error)
+      alert(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsImporting(false)
+      setImportProgress(null)
+      if (folderInputRef.current) {
+        folderInputRef.current.value = ''
+      }
+    }
+  }
 
   return (
     <div className="h-full flex overflow-hidden">
+      {/* Hidden folder input */}
+      <input
+        ref={folderInputRef}
+        type="file"
+        onChange={handleFolderImport}
+        className="hidden"
+        {...{ webkitdirectory: '', directory: '' } as any}
+        multiple
+      />
+      
       {/* File Tree Sidebar */}
       <div className="w-72 border-r border-freya-border bg-freya-bg-secondary flex flex-col">
         {/* Toolbar */}
         <div className="p-3 border-b border-freya-border">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-freya-text-muted" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search files..."
-              className="input pl-9 py-2 text-sm"
-            />
+          <div className="flex items-center gap-2 mb-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-freya-text-muted" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search files..."
+                className="input pl-9 py-2 text-sm"
+              />
+            </div>
+            <button
+              onClick={() => folderInputRef.current?.click()}
+              disabled={isImporting}
+              className="btn-secondary p-2"
+              title="Import folder for BMAD"
+            >
+              {isImporting ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <FolderPlus className="w-4 h-4" />
+              )}
+            </button>
           </div>
+          
+          {/* Import progress */}
+          {importProgress && (
+            <div className="mt-2">
+              <div className="flex items-center justify-between text-xs text-freya-text-muted mb-1">
+                <span>Importing...</span>
+                <span>{importProgress.current}/{importProgress.total}</span>
+              </div>
+              <div className="w-full h-1 bg-freya-bg-tertiary rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-freya-accent-blue transition-all"
+                  style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Breadcrumb */}

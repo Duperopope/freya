@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Loader2, Copy, Check, Settings2, Shield, Globe, FileText, X, Paperclip, Image, Plus, Edit2, Trash2, RotateCcw, StopCircle, Users, Brain, MessageSquare, History, ChevronDown, ChevronRight, Search, Lightbulb, Rocket, TrendingUp } from 'lucide-react'
+import { Send, Loader2, Copy, Check, Settings2, Shield, Globe, FileText, X, Paperclip, Image, Plus, Edit2, Trash2, RotateCcw, StopCircle, Users, Brain, MessageSquare, History, ChevronDown, ChevronRight, Search, Lightbulb, Rocket, TrendingUp, Download, Share2 } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -7,11 +7,14 @@ import { clsx } from 'clsx'
 import * as api from '../../lib/api'
 import { useAppStore } from '../../stores/appStore'
 
-// Chat modes - Added 'research' mode
-type ChatMode = 'standard' | 'multi-agent' | 'reflection' | 'research'
+// Chat modes - Added 'research' and 'exchange' modes
+type ChatMode = 'standard' | 'multi-agent' | 'reflection' | 'research' | 'exchange'
 
 // Research phases
 type ResearchPhase = 'idle' | 'searching' | 'analyzing' | 'briefing' | 'bmad_ready' | 'bmad'
+
+// Research sub-modes
+type ResearchSubMode = 'assisted' | 'autonomous'
 
 interface Message {
   id: string
@@ -82,6 +85,16 @@ export function ChatPage() {
   // Research mode state
   const [researchPhase, setResearchPhase] = useState<ResearchPhase>('idle')
   const [researchAnalysis, setResearchAnalysis] = useState<string | null>(null)
+  const [researchSubMode, setResearchSubMode] = useState<ResearchSubMode>('assisted')
+  const [autonomousRunning, setAutonomousRunning] = useState(false)
+  const [autonomousIteration, setAutonomousIteration] = useState(0)
+  
+  // Exchange mode state (two AIs conversing)
+  const [exchangeModel1, setExchangeModel1] = useState<string>('')
+  const [exchangeModel2, setExchangeModel2] = useState<string>('')
+  const [exchangeTopic, setExchangeTopic] = useState('')
+  const [exchangeRunning, setExchangeRunning] = useState(false)
+  const [exchangeIterations, setExchangeIterations] = useState(5)
   
   // Global store for research state persistence
   const { setResearchState } = useAppStore()
@@ -203,6 +216,52 @@ export function ChatPage() {
     if (currentConversationId === convId) {
       setMessages([])
       setCurrentConversationId(null)
+    }
+  }
+  
+  // Export conversation to JSON
+  const exportConversation = (conv: Conversation) => {
+    const exportData = {
+      id: conv.id,
+      title: conv.title,
+      createdAt: conv.createdAt.toISOString(),
+      updatedAt: conv.updatedAt.toISOString(),
+      messages: conv.messages.map(m => ({
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp.toISOString(),
+        model: m.model,
+        agentName: m.agentName,
+      })),
+      exportedAt: new Date().toISOString(),
+      freya_version: '2.5',
+    }
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `freya-chat-${conv.title.slice(0, 30).replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  
+  // Generate shareable link (copies to clipboard)
+  const shareConversation = async (conv: Conversation) => {
+    // Create a base64 encoded version for sharing
+    const shareData = {
+      t: conv.title,
+      m: conv.messages.slice(-10).map(m => ({ r: m.role, c: m.content.slice(0, 500) })), // Last 10 messages, truncated
+    }
+    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(shareData))))
+    const shareUrl = `${window.location.origin}/chat?share=${encoded}`
+    
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      alert('Share link copied to clipboard!')
+    } catch (e) {
+      // Fallback: show the link
+      prompt('Copy this share link:', shareUrl)
     }
   }
 
@@ -756,6 +815,208 @@ Format: Brief concis et actionnable pour démarrer un projet BMAD.`
     
     setIsProcessingMulti(false)
   }
+  
+  // Autonomous Research mode: auto-search for app ideas, analyze, and send to BMAD
+  const handleAutonomousResearch = async () => {
+    setAutonomousRunning(true)
+    setAutonomousIteration(1)
+    setResearchPhase('searching')
+    
+    const autoSearchMsg: Message = {
+      id: `auto-search-${Date.now()}`,
+      role: 'system',
+      content: `🤖 **Mode Autonome Activé**\n\nRecherche automatique d'opportunités d'applications rentables...`,
+      timestamp: new Date(),
+    }
+    setMessages(prev => [...prev, autoSearchMsg])
+    
+    try {
+      // Phase 1: Search for trending app ideas
+      const trendingSearch = await api.webSearch('trending SaaS ideas 2024 2025 profitable', 5)
+      const gapSearch = await api.webSearch('software market gaps opportunities underserved', 5)
+      const techSearch = await api.webSearch('no-code low-code app ideas for developers', 5)
+      
+      const allResults = [...trendingSearch, ...gapSearch, ...techSearch]
+      
+      // Update search results
+      setMessages(prev => prev.map(m => 
+        m.id === autoSearchMsg.id 
+          ? { ...m, content: `✅ **Recherche terminée**\n\n${allResults.length} opportunités identifiées:\n${allResults.slice(0, 5).map(r => `• ${r.title}`).join('\n')}` }
+          : m
+      ))
+      
+      if (!autonomousRunning) return // Check if stopped
+      
+      // Phase 2: AI selects the best idea
+      setResearchPhase('analyzing')
+      const selectionPrompt = `Based on these market opportunities, select the ONE most promising app idea that:
+1. Has clear market demand
+2. Is technically feasible with modern tools
+3. Has a clear monetization path
+4. Can be developed in a reasonable timeframe
+
+Opportunities found:
+${allResults.map(r => `- ${r.title}: ${r.snippet}`).join('\n')}
+
+Respond with:
+**Selected Idea:** [Name]
+**Why:** [Brief justification]
+**Target Users:** [Who]
+**Key Features:** [3-5 bullet points]
+**Monetization:** [Strategy]`
+
+      const selectionData = await api.generateChat({
+        message: selectionPrompt,
+        system_prompt: 'You are an expert startup advisor selecting the most viable app idea.',
+        max_tokens: 1024,
+      })
+      
+      if (!autonomousRunning) return
+      
+      const ideaMsg: Message = {
+        id: `auto-idea-${Date.now()}`,
+        role: 'assistant',
+        content: `## 🎯 Idée Sélectionnée\n\n${selectionData.content}`,
+        timestamp: new Date(),
+        model: selectionData.model,
+        agentName: 'Autonomous Selector',
+      }
+      setMessages(prev => [...prev, ideaMsg])
+      
+      // Phase 3: Prepare BMAD brief
+      setResearchPhase('briefing')
+      const briefPrompt = `Convert this selected idea into a BMAD project brief:
+
+${selectionData.content}
+
+Create a structured brief with:
+1. **Project Name**: Clear, memorable name
+2. **Goal**: One-sentence project goal
+3. **User Stories**: 3 key user stories
+4. **Technical Stack**: Recommended technologies
+5. **MVP Scope**: What to include in v1
+6. **Success Metrics**: How to measure success`
+
+      const briefData = await api.generateChat({
+        message: briefPrompt,
+        system_prompt: 'You are a product strategist creating actionable project briefs.',
+        max_tokens: 1500,
+      })
+      
+      const briefMsg: Message = {
+        id: `auto-brief-${Date.now()}`,
+        role: 'synthesis',
+        content: `## 📋 Brief BMAD Auto-Généré\n\n${briefData.content}\n\n---\n\n🚀 **Prêt pour le pipeline BMAD** - Le brief sera transféré automatiquement.`,
+        timestamp: new Date(),
+        model: briefData.model,
+        agentName: 'Autonomous Brief',
+      }
+      setMessages(prev => [...prev, briefMsg])
+      
+      // Update global state for BMAD integration
+      setResearchState({
+        isActive: true,
+        phase: 'bmad_ready',
+        searchResults: allResults,
+        analysisReport: selectionData.content,
+        selectedIdea: briefData.content,
+      })
+      
+      setResearchPhase('bmad_ready')
+      setAutonomousIteration(prev => prev + 1)
+      
+    } catch (e) {
+      console.error('[Autonomous] Error:', e)
+      const errorMsg: Message = {
+        id: `auto-error-${Date.now()}`,
+        role: 'system',
+        content: `❌ **Erreur en mode autonome:** ${e instanceof Error ? e.message : 'Erreur inconnue'}`,
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, errorMsg])
+    }
+    
+    setAutonomousRunning(false)
+    setResearchPhase('idle')
+  }
+  
+  // Exchange mode: Two AIs discuss a topic autonomously
+  const handleExchangeChat = async () => {
+    if (!exchangeModel1 || !exchangeModel2 || !exchangeTopic || exchangeModel1 === exchangeModel2) {
+      return
+    }
+    
+    setExchangeRunning(true)
+    
+    // Add initial message
+    const startMsg: Message = {
+      id: `exchange-start-${Date.now()}`,
+      role: 'system',
+      content: `🔄 **AI Exchange Started**\n\n**Topic:** ${exchangeTopic}\n**AI 1:** ${exchangeModel1}\n**AI 2:** ${exchangeModel2}\n**Iterations:** ${exchangeIterations}`,
+      timestamp: new Date(),
+    }
+    setMessages(prev => [...prev, startMsg])
+    
+    let lastResponse = exchangeTopic
+    
+    for (let i = 0; i < exchangeIterations && exchangeRunning; i++) {
+      const currentModel = i % 2 === 0 ? exchangeModel1 : exchangeModel2
+      const otherModel = i % 2 === 0 ? exchangeModel2 : exchangeModel1
+      
+      try {
+        const prompt = i === 0 
+          ? `You are having a discussion about: "${exchangeTopic}". Start the conversation with your perspective.`
+          : `Your conversation partner (${otherModel}) said: "${lastResponse}"\n\nContinue the discussion. Add new insights or build upon their points. Keep it focused and insightful.`
+        
+        const response = await api.generateChat({
+          message: prompt,
+          model: currentModel,
+          system_prompt: `You are engaged in a thoughtful discussion. Be concise but insightful. This is exchange ${i + 1}/${exchangeIterations}.`,
+          max_tokens: 512,
+        })
+        
+        lastResponse = response.content
+        
+        const agentMsg: Message = {
+          id: `exchange-${i}-${Date.now()}`,
+          role: 'agent',
+          content: response.content,
+          timestamp: new Date(),
+          model: currentModel,
+          agentName: `${currentModel.split(':')[0]} (#${i + 1})`,
+          duration_ms: response.duration_ms,
+        }
+        
+        setMessages(prev => [...prev, agentMsg])
+        
+        // Small delay between exchanges
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+      } catch (e) {
+        console.error(`[Exchange] Error at iteration ${i}:`, e)
+        const errorMsg: Message = {
+          id: `exchange-error-${Date.now()}`,
+          role: 'system',
+          content: `⚠️ Exchange interrupted at iteration ${i + 1}: ${e instanceof Error ? e.message : 'Unknown error'}`,
+          timestamp: new Date(),
+        }
+        setMessages(prev => [...prev, errorMsg])
+        break
+      }
+    }
+    
+    // Add summary
+    const endMsg: Message = {
+      id: `exchange-end-${Date.now()}`,
+      role: 'synthesis',
+      content: `## 📝 Exchange Complete\n\nThe discussion between **${exchangeModel1}** and **${exchangeModel2}** on "${exchangeTopic}" has concluded. Review the insights above.`,
+      timestamp: new Date(),
+      agentName: 'Exchange Summary',
+    }
+    setMessages(prev => [...prev, endMsg])
+    
+    setExchangeRunning(false)
+  }
 
   // Search mutation
   const searchMutation = useMutation({
@@ -831,6 +1092,11 @@ Format: Brief concis et actionnable pour démarrer un projet BMAD.`
     
     if (chatMode === 'research') {
       handleResearchChat(text)
+      return
+    }
+    
+    if (chatMode === 'exchange') {
+      // Exchange mode uses its own topic input
       return
     }
 
@@ -1061,15 +1327,38 @@ Format: Brief concis et actionnable pour démarrer un projet BMAD.`
                       {conv.messages.length} messages
                     </p>
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      deleteConversation(conv.id)
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-freya-accent-red/20 text-freya-text-muted hover:text-freya-accent-red transition-all"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        shareConversation(conv)
+                      }}
+                      className="p-1 rounded hover:bg-freya-accent-blue/20 text-freya-text-muted hover:text-freya-accent-blue"
+                      title="Share"
+                    >
+                      <Share2 className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        exportConversation(conv)
+                      }}
+                      className="p-1 rounded hover:bg-freya-accent-green/20 text-freya-text-muted hover:text-freya-accent-green"
+                      title="Export JSON"
+                    >
+                      <Download className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteConversation(conv.id)
+                      }}
+                      className="p-1 rounded hover:bg-freya-accent-red/20 text-freya-text-muted hover:text-freya-accent-red"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -1146,6 +1435,19 @@ Format: Brief concis et actionnable pour démarrer un projet BMAD.`
             >
               <Search className="w-4 h-4" />
               <span className="hidden sm:inline">Research</span>
+            </button>
+            <button
+              onClick={() => setChatMode('exchange')}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-all',
+                chatMode === 'exchange'
+                  ? 'bg-freya-accent-red/20 text-freya-accent-red shadow'
+                  : 'text-freya-text-muted hover:text-freya-text-secondary'
+              )}
+              title="Exchange mode: Two AIs discuss autonomously"
+            >
+              <Users className="w-4 h-4" />
+              <span className="hidden sm:inline">Exchange</span>
             </button>
           </div>
           
@@ -1264,32 +1566,75 @@ Format: Brief concis et actionnable pour démarrer un projet BMAD.`
         
         {chatMode === 'research' && (
           <div className="p-3 border-b border-freya-border bg-freya-accent-yellow/5">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Search className="w-4 h-4 text-freya-accent-yellow" />
-                <span className="text-sm font-medium text-freya-text-primary">Research Mode</span>
+            <div className="flex items-center gap-4 flex-wrap">
+              {/* Sub-mode selector */}
+              <div className="flex items-center gap-1 bg-freya-bg-tertiary rounded-lg p-1">
+                <button
+                  onClick={() => setResearchSubMode('assisted')}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-md text-sm transition-all',
+                    researchSubMode === 'assisted'
+                      ? 'bg-freya-accent-yellow text-white'
+                      : 'text-freya-text-muted hover:text-freya-text-secondary'
+                  )}
+                >
+                  Assisted
+                </button>
+                <button
+                  onClick={() => setResearchSubMode('autonomous')}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-md text-sm transition-all',
+                    researchSubMode === 'autonomous'
+                      ? 'bg-freya-accent-red text-white'
+                      : 'text-freya-text-muted hover:text-freya-text-secondary'
+                  )}
+                >
+                  Autonomous
+                </button>
               </div>
+              
+              {/* Mode description */}
               <div className="flex items-center gap-3 text-xs text-freya-text-muted">
-                <span className="flex items-center gap-1">
-                  <Globe className="w-3 h-3" />
-                  Internet Search
-                </span>
-                <span>→</span>
-                <span className="flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3" />
-                  Market Analysis
-                </span>
-                <span>→</span>
-                <span className="flex items-center gap-1">
-                  <Lightbulb className="w-3 h-3" />
-                  BMAD Brief
-                </span>
-                <span>→</span>
-                <span className="flex items-center gap-1">
-                  <Rocket className="w-3 h-3" />
-                  Launch Project
-                </span>
+                {researchSubMode === 'assisted' ? (
+                  <>
+                    <span className="flex items-center gap-1">
+                      <Globe className="w-3 h-3" />
+                      Your idea
+                    </span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1">
+                      <TrendingUp className="w-3 h-3" />
+                      Analysis
+                    </span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1">
+                      <Rocket className="w-3 h-3" />
+                      BMAD
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex items-center gap-1">
+                      <Search className="w-3 h-3" />
+                      Auto-search
+                    </span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1">
+                      <Lightbulb className="w-3 h-3" />
+                      Ideas
+                    </span>
+                    <span>→</span>
+                    <span className="flex items-center gap-1">
+                      <Rocket className="w-3 h-3" />
+                      Pipeline
+                    </span>
+                    <span>→</span>
+                    <span className="badge badge-red text-xs">Loop</span>
+                  </>
+                )}
               </div>
+              
+              {/* Status */}
               {researchPhase !== 'idle' && (
                 <span className={clsx(
                   'badge',
@@ -1304,6 +1649,111 @@ Format: Brief concis et actionnable pour démarrer un projet BMAD.`
                   {researchPhase === 'bmad_ready' && '✅ Prêt pour BMAD'}
                 </span>
               )}
+              
+              {/* Autonomous controls */}
+              {researchSubMode === 'autonomous' && (
+                <div className="flex items-center gap-2">
+                  {autonomousRunning ? (
+                    <button
+                      onClick={() => setAutonomousRunning(false)}
+                      className="btn-danger text-xs px-2 py-1 flex items-center gap-1"
+                    >
+                      <StopCircle className="w-3 h-3" />
+                      Stop (#{autonomousIteration})
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleAutonomousResearch()}
+                      disabled={isProcessingMulti}
+                      className="btn-primary text-xs px-2 py-1 flex items-center gap-1"
+                    >
+                      <Rocket className="w-3 h-3" />
+                      Start Autonomous
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* Exchange Mode Settings */}
+        {chatMode === 'exchange' && (
+          <div className="p-3 border-b border-freya-border bg-freya-accent-red/5">
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-freya-accent-red" />
+                <span className="text-sm font-medium text-freya-text-primary">AI Exchange</span>
+              </div>
+              
+              {/* Model selectors */}
+              <div className="flex items-center gap-2">
+                <select
+                  value={exchangeModel1}
+                  onChange={(e) => setExchangeModel1(e.target.value)}
+                  className="input py-1 text-xs w-32"
+                >
+                  <option value="">AI 1...</option>
+                  {models?.map(m => (
+                    <option key={m.name} value={m.name}>{m.name}</option>
+                  ))}
+                </select>
+                <span className="text-freya-text-muted">↔</span>
+                <select
+                  value={exchangeModel2}
+                  onChange={(e) => setExchangeModel2(e.target.value)}
+                  className="input py-1 text-xs w-32"
+                >
+                  <option value="">AI 2...</option>
+                  {models?.map(m => (
+                    <option key={m.name} value={m.name}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Iterations */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-freya-text-muted">Exchanges:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={exchangeIterations}
+                  onChange={(e) => setExchangeIterations(parseInt(e.target.value) || 5)}
+                  className="input py-1 text-xs w-16"
+                />
+              </div>
+              
+              {/* Control */}
+              {exchangeRunning ? (
+                <button
+                  onClick={() => setExchangeRunning(false)}
+                  className="btn-danger text-xs px-2 py-1 flex items-center gap-1"
+                >
+                  <StopCircle className="w-3 h-3" />
+                  Stop
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleExchangeChat()}
+                  disabled={!exchangeModel1 || !exchangeModel2 || !exchangeTopic || exchangeModel1 === exchangeModel2}
+                  className="btn-primary text-xs px-2 py-1 flex items-center gap-1"
+                >
+                  <MessageSquare className="w-3 h-3" />
+                  Start Exchange
+                </button>
+              )}
+            </div>
+            
+            {/* Topic input */}
+            <div className="mt-2">
+              <input
+                type="text"
+                value={exchangeTopic}
+                onChange={(e) => setExchangeTopic(e.target.value)}
+                placeholder="Topic for AI discussion... (e.g., 'Best architecture for a social media app')"
+                className="input text-sm w-full"
+              />
             </div>
           </div>
         )}
