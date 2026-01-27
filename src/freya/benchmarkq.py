@@ -378,4 +378,177 @@ def default_bench_suite() -> list[BenchCase]:
         )
     )
 
+    # =========================================================================
+    # NEW v2.5 AGENT ROLES
+    # =========================================================================
+
+    # SECURITY: threat modeling + vulnerability assessment
+    suite.append(
+        BenchCase(
+            role="security",
+            name="security_threat_model",
+            prompt=(
+                "Return EXACTLY this Markdown skeleton, then fill it.\n"
+                "# Security Assessment\n"
+                "## threat model\n"
+                "## attack vectors\n"
+                "## vulnerabilities\n"
+                "## mitigations\n"
+                "## compliance checklist\n"
+                "Include OWASP Top 10 references where applicable.\n"
+            ),
+            required_regex=[
+                r"(?im)^#\s*Security\s+Assessment\s*$",
+                r"(?im)^##\s*threat\s+model\s*$",
+                r"(?im)^##\s*vulnerabilities\s*$",
+                r"(?im)^##\s*mitigations\s*$",
+            ],
+            min_bullets=10,
+            must_contain_tokens=["OWASP", "authentication", "injection"],
+        )
+    )
+    suite.append(
+        BenchCase(
+            role="security",
+            name="security_api_hardening",
+            prompt=(
+                "Write ONLY:\n"
+                "## API Security Checklist\n"
+                "Provide 8 security controls for a REST API.\n"
+                "Each must include: control name, implementation, and risk level (High/Medium/Low).\n"
+            ),
+            required_regex=[r"(?im)^##\s*API\s+Security\s+Checklist\s*$"],
+            min_bullets=8,
+            must_contain_tokens=["rate limit", "JWT", "HTTPS"],
+        )
+    )
+
+    # DEVOPS: CI/CD + infrastructure
+    suite.append(
+        BenchCase(
+            role="devops",
+            name="devops_pipeline",
+            prompt=(
+                "Return EXACTLY this Markdown skeleton, then fill it.\n"
+                "# DevOps Pipeline\n"
+                "## CI/CD stages\n"
+                "## infrastructure\n"
+                "## monitoring\n"
+                "## deployment strategy\n"
+                "Include GitHub Actions or similar CI tool references.\n"
+            ),
+            required_regex=[
+                r"(?im)^#\s*DevOps\s+Pipeline\s*$",
+                r"(?im)^##\s*CI/CD\s+stages\s*$",
+                r"(?im)^##\s*infrastructure\s*$",
+                r"(?im)^##\s*deployment\s+strategy\s*$",
+            ],
+            min_bullets=10,
+            must_contain_tokens=["Docker", "test", "deploy"],
+        )
+    )
+    suite.append(
+        BenchCase(
+            role="devops",
+            name="devops_dockerfile",
+            prompt=(
+                "Write a complete Dockerfile for a Python FastAPI application.\n"
+                "Include:\n"
+                "- Multi-stage build\n"
+                "- Non-root user\n"
+                "- Health check\n"
+                "- Proper layer caching\n"
+                "Output ONLY the Dockerfile content in a code block.\n"
+            ),
+            required_regex=[r"(?im)FROM", r"(?im)COPY", r"(?im)CMD|ENTRYPOINT"],
+            must_contain_tokens=["python", "pip", "EXPOSE"],
+        )
+    )
+
+    # UX: user experience design
+    suite.append(
+        BenchCase(
+            role="ux",
+            name="ux_user_journey",
+            prompt=(
+                "Return EXACTLY this Markdown skeleton, then fill it.\n"
+                "# UX Design\n"
+                "## user personas\n"
+                "## user journey map\n"
+                "## wireframe descriptions\n"
+                "## accessibility requirements\n"
+                "## usability heuristics\n"
+            ),
+            required_regex=[
+                r"(?im)^#\s*UX\s+Design\s*$",
+                r"(?im)^##\s*user\s+personas\s*$",
+                r"(?im)^##\s*user\s+journey\s+map\s*$",
+                r"(?im)^##\s*accessibility\s+requirements\s*$",
+            ],
+            min_bullets=12,
+            must_contain_tokens=["click", "screen", "user"],
+        )
+    )
+    suite.append(
+        BenchCase(
+            role="ux",
+            name="ux_accessibility",
+            prompt=(
+                "Write ONLY:\n"
+                "## Accessibility Checklist (WCAG 2.1)\n"
+                "Provide 10 accessibility requirements with:\n"
+                "- Requirement name\n"
+                "- WCAG level (A, AA, AAA)\n"
+                "- Implementation guidance\n"
+            ),
+            required_regex=[r"(?im)^##\s*Accessibility\s+Checklist"],
+            min_bullets=10,
+            must_contain_tokens=["WCAG", "contrast", "keyboard"],
+        )
+    )
+
+    # DATA: data analysis + ML evaluation
+    suite.append(
+        BenchCase(
+            role="data",
+            name="data_analysis_plan",
+            prompt=(
+                "Return EXACTLY this Markdown skeleton, then fill it.\n"
+                "# Data Analysis Plan\n"
+                "## data sources\n"
+                "## data quality checks\n"
+                "## analysis methodology\n"
+                "## metrics and KPIs\n"
+                "## visualization strategy\n"
+            ),
+            required_regex=[
+                r"(?im)^#\s*Data\s+Analysis\s+Plan\s*$",
+                r"(?im)^##\s*data\s+sources\s*$",
+                r"(?im)^##\s*metrics\s+and\s+KPIs\s*$",
+            ],
+            min_bullets=10,
+            must_contain_tokens=["accuracy", "precision", "recall"],
+            min_numbers=3,
+        )
+    )
+    suite.append(
+        BenchCase(
+            role="data",
+            name="data_ml_evaluation",
+            prompt=(
+                "Write ONLY:\n"
+                "## ML Model Evaluation\n"
+                "For a classification model, provide:\n"
+                "- 5 metrics with formulas\n"
+                "- Confusion matrix interpretation\n"
+                "- Cross-validation strategy\n"
+                "Include numeric thresholds for each metric.\n"
+            ),
+            required_regex=[r"(?im)^##\s*ML\s+Model\s+Evaluation\s*$"],
+            min_bullets=8,
+            must_contain_tokens=["accuracy", "F1", "confusion"],
+            min_numbers=5,
+        )
+    )
+
     return suite

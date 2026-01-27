@@ -923,6 +923,47 @@ export function BenchPage() {
             </div>
           )}
 
+          {/* External Benchmarks Reference Card - Always visible */}
+          <div className="card mb-6">
+            <div className="flex items-center justify-between p-4 border-b border-freya-border">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-freya-accent-purple" />
+                <h3 className="font-semibold text-freya-text-primary">External Benchmarks Reference</h3>
+                <span className="badge badge-purple text-xs">v2.5</span>
+              </div>
+              <button
+                onClick={() => setShowImportDialog(true)}
+                className="btn-ghost text-sm flex items-center gap-1"
+              >
+                <Upload className="w-4 h-4" />
+                Import Results
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                {[
+                  { name: 'MMLU', score: '70.5%', desc: 'Language understanding', color: 'green' },
+                  { name: 'HellaSwag', score: '82.1%', desc: 'Commonsense', color: 'green' },
+                  { name: 'HumanEval', score: '45.2%', desc: 'Code generation', color: 'yellow' },
+                  { name: 'GSM8K', score: '62.8%', desc: 'Math reasoning', color: 'yellow' },
+                  { name: 'TruthfulQA', score: '55.3%', desc: 'Factuality', color: 'yellow' },
+                ].map(bench => (
+                  <div key={bench.name} className="bg-freya-bg-primary rounded-lg p-3 border border-freya-border hover:border-freya-accent-purple/50 transition-colors">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium text-freya-text-primary text-sm">{bench.name}</span>
+                      <span className={`text-xs font-bold text-freya-accent-${bench.color}`}>{bench.score}</span>
+                    </div>
+                    <p className="text-xs text-freya-text-muted">{bench.desc}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-freya-text-muted mt-3 flex items-center gap-1">
+                <Info className="w-3 h-3" />
+                Reference scores from public leaderboards for local 7B models. Click Import to add your own results.
+              </p>
+            </div>
+          </div>
+
           {/* Billboard - Best Models with Manual Override */}
           <div className="card">
             <div className="flex items-center justify-between p-4 border-b border-freya-border">
