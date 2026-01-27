@@ -1226,6 +1226,38 @@ Répondez à ces questions ou posez-moi les vôtres !`,
               </div>
             </div>
           )}
+          
+          {/* Live Pipeline Logs */}
+          {bmadProgress?.logs && bmadProgress.logs.length > 0 && (
+            <div className="mt-4 p-3 rounded-lg bg-freya-bg-primary border border-freya-border">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-freya-accent-cyan">
+                  <Activity className="w-4 h-4" />
+                  <span className="font-medium text-sm">Live Logs ({bmadProgress.logs.length})</span>
+                </div>
+                {bmadProgress.running && (
+                  <span className="badge badge-green text-xs animate-pulse">Running</span>
+                )}
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-1 font-mono text-xs">
+                {bmadProgress.logs.slice(-20).map((log, i) => (
+                  <div 
+                    key={i} 
+                    className={clsx(
+                      'flex gap-2 py-0.5',
+                      log.level === 'error' && 'text-freya-accent-red',
+                      log.level === 'success' && 'text-freya-accent-green',
+                      log.level === 'info' && 'text-freya-text-primary'
+                    )}
+                  >
+                    <span className="text-freya-text-muted w-16 flex-shrink-0">{log.timestamp}</span>
+                    <span className="text-freya-accent-blue w-16 flex-shrink-0">{log.agent || '-'}</span>
+                    <span className="flex-1 break-words">{log.message}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
             </>
           )}
         </div>

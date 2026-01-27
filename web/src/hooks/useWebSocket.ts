@@ -43,7 +43,7 @@ export function useWebSocket() {
           setBenchProgress(message.data as never)
         }
         
-        // Handle BMAD progress
+        // Handle BMAD progress with logs
         if (message.channel === 'bmad') {
           if (message.event === 'started') {
             setBMADProgress({
@@ -51,6 +51,7 @@ export function useWebSocket() {
               current_agent: null,
               agents_completed: [],
               artifacts_generated: [],
+              logs: [],
             })
           } else if (message.event === 'agent_start') {
             setBMADProgress((prev) => ({
@@ -62,6 +63,18 @@ export function useWebSocket() {
               ...prev!,
               agents_completed: [...(prev?.agents_completed || []), message.data.agent as string],
               artifacts_generated: [...(prev?.artifacts_generated || []), message.data.artifact as string],
+            }))
+          } else if (message.event === 'log') {
+            // Append new log entry
+            setBMADProgress((prev) => ({
+              ...prev!,
+              logs: [...(prev?.logs || []), {
+                timestamp: message.data.timestamp as string || new Date().toLocaleTimeString(),
+                level: message.data.level as string || 'info',
+                agent: message.data.agent as string | null,
+                message: message.data.message as string || '',
+                details: message.data.details as Record<string, unknown> || {},
+              }].slice(-100), // Keep last 100 logs
             }))
           } else if (message.event === 'complete' || message.event === 'error') {
             setBMADProgress((prev) => ({

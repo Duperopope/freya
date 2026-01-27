@@ -73,7 +73,7 @@ class AutopilotRequest(BaseModel):
 # Global BMAD State
 # -----------------------------------------------------------------------------
 class BMADRuntime:
-    """Thread-safe BMAD runtime state."""
+    """Thread-safe BMAD runtime state with persistence and detailed logging."""
     
     def __init__(self):
         self._lock = threading.Lock()
@@ -82,6 +82,10 @@ class BMADRuntime:
         self._completed: list[str] = []
         self._artifacts: list[str] = []
         self._error: str | None = None
+        self._logs: list[dict[str, Any]] = []  # Detailed execution logs
+        self._project_name: str = ""
+        self._goal: str = ""
+        self._started_at: str | None = None
     
     @property
     def status(self) -> dict[str, Any]:
@@ -91,10 +95,14 @@ class BMADRuntime:
                 "current_agent": self._current_agent,
                 "agents_completed": list(self._completed),
                 "artifacts_generated": list(self._artifacts),
-                "error": self._error
+                "error": self._error,
+                "logs": list(self._logs[-50:]),  # Last 50 logs
+                "project_name": self._project_name,
+                "goal": self._goal,
+                "started_at": self._started_at,
             }
     
-    def start(self) -> bool:
+    def start(self, project_name: str = "", goal: str = "") -> bool:
         with self._lock:
             if self._running:
                 return False
@@ -103,11 +111,26 @@ class BMADRuntime:
             self._completed = []
             self._artifacts = []
             self._error = None
+            self._logs = []
+            self._project_name = project_name
+            self._goal = goal
+            self._started_at = time.strftime("%Y-%m-%d %H:%M:%S")
             return True
     
     def set_agent(self, agent: str) -> None:
         with self._lock:
             self._current_agent = agent
+    
+    def add_log(self, level: str, message: str, agent: str | None = None, details: dict | None = None) -> None:
+        """Add a detailed log entry."""
+        with self._lock:
+            self._logs.append({
+                "timestamp": time.strftime("%H:%M:%S"),
+                "level": level,
+                "agent": agent or self._current_agent,
+                "message": message,
+                "details": details or {}
+            })
     
     def complete_agent(self, agent: str, artifact: str | None = None) -> None:
         with self._lock:
@@ -123,6 +146,28 @@ class BMADRuntime:
         with self._lock:
             self._running = False
             self._current_agent = None
+    
+    def get_state_for_persistence(self) -> dict[str, Any]:
+        """Get state dict for saving to file."""
+        with self._lock:
+            return {
+                "project_name": self._project_name,
+                "goal": self._goal,
+                "completed_agents": list(self._completed),
+                "artifacts": list(self._artifacts),
+                "error": self._error,
+                "started_at": self._started_at,
+                "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+    
+    def load_state(self, state: dict[str, Any]) -> None:
+        """Load state from persistence."""
+        with self._lock:
+            self._project_name = state.get("project_name", "")
+            self._goal = state.get("goal", "")
+            self._completed = state.get("completed_agents", [])
+            self._artifacts = state.get("artifacts", [])
+            self._error = state.get("error")
 
 
 _bmad_runtime = BMADRuntime()
@@ -131,10 +176,68 @@ _bmad_runtime = BMADRuntime()
 # -----------------------------------------------------------------------------
 # Endpoints
 # -----------------------------------------------------------------------------
-@router.get("/status", response_model=BMADStatus)
-async def get_bmad_status() -> BMADStatus:
-    """Get current BMAD workflow status."""
-    return BMADStatus(**_bmad_runtime.status)
+@router.get("/status")
+async def get_bmad_status() -> dict[str, Any]:
+    """Get current BMAD workflow status with logs."""
+    return _bmad_runtime.status
+
+
+@router.get("/logs")
+async def get_bmad_logs() -> dict[str, Any]:
+    """Get detailed execution logs."""
+    status = _bmad_runtime.status
+    return {
+        "logs": status.get("logs", []),
+        "project_name": status.get("project_name"),
+        "running": status.get("running"),
+        "current_agent": status.get("current_agent"),
+    }
+
+
+@router.post("/resume")
+async def resume_bmad_project(
+    request: Request,
+    project_name: str,
+    background_tasks: BackgroundTasks
+) -> dict[str, Any]:
+    """Resume a BMAD project from where it stopped."""
+    state = request.app.state.freya
+    
+    if not state.ready:
+        raise HTTPException(status_code=503, detail="Service not ready")
+    
+    # Find project state file
+    output_dir = state.config.output_root / project_name
+    state_file = output_dir / ".bmad_state.json"
+    
+    if not state_file.exists():
+        raise HTTPException(status_code=404, detail=f"No saved state found for project '{project_name}'")
+    
+    try:
+        saved_state = json.loads(state_file.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load state: {e}")
+    
+    completed_agents = saved_state.get("completed_agents", [])
+    goal = saved_state.get("goal", "")
+    
+    return {
+        "project_name": project_name,
+        "goal": goal,
+        "completed_agents": completed_agents,
+        "can_resume": True,
+        "next_agent": _get_next_agent(completed_agents),
+        "message": f"Project '{project_name}' can be resumed. Use /run with same goal to continue."
+    }
+
+
+def _get_next_agent(completed: list[str]) -> str | None:
+    """Get the next agent to run based on completed list."""
+    all_agents = ["analyst", "pm", "architect", "po", "sm", "dev", "qa"]
+    for agent in all_agents:
+        if agent not in completed:
+            return agent
+    return None
 
 
 @router.post("/run")
@@ -144,11 +247,12 @@ async def run_bmad_workflow(
     background_tasks: BackgroundTasks
 ) -> dict[str, Any]:
     """
-    Run full BMAD workflow.
+    Run full BMAD workflow with detailed logging and code generation.
     
     Executes all agents in sequence:
     Analyst -> PM -> Architect -> PO -> SM -> Dev -> QA
     
+    Dev agent creates actual code files. QA runs tests.
     Progress is streamed via WebSocket (channel: bmad).
     """
     state = request.app.state.freya
@@ -156,7 +260,7 @@ async def run_bmad_workflow(
     if not state.ready:
         raise HTTPException(status_code=503, detail="Service not ready")
     
-    if not _bmad_runtime.start():
+    if not _bmad_runtime.start(project_name=body.project_name, goal=body.goal):
         raise HTTPException(status_code=409, detail="BMAD workflow already running")
     
     # Determine output directory
@@ -166,7 +270,7 @@ async def run_bmad_workflow(
         output_dir = state.config.output_root / body.project_name
     
     def run_workflow():
-        """Background BMAD runner."""
+        """Background BMAD runner with detailed logging."""
         ws_manager = state.ws_manager
         
         def broadcast(event: str, data: dict[str, Any]) -> None:
@@ -174,46 +278,122 @@ async def run_bmad_workflow(
                 ws_manager.broadcast_sync(WSMessage(
                     channel=ChannelType.BMAD,
                     event=event,
-                    data=data
+                    data={**data, "logs": _bmad_runtime.status.get("logs", [])}
                 ))
         
+        def log_and_broadcast(level: str, message: str, agent: str | None = None, details: dict | None = None):
+            """Log message and broadcast to frontend."""
+            _bmad_runtime.add_log(level, message, agent, details)
+            broadcast("log", {
+                "level": level,
+                "message": message,
+                "agent": agent or _bmad_runtime.status.get("current_agent"),
+                "details": details or {}
+            })
+            logger.info(f"[BMAD/{agent or 'system'}] {message}")
+        
         try:
+            log_and_broadcast("info", f"🚀 Pipeline BMAD démarré pour '{body.project_name}'")
+            log_and_broadcast("info", f"📋 Objectif: {body.goal[:200]}...")
             broadcast("started", {"goal": body.goal, "project_name": body.project_name})
             
-            # Initialize artifacts directory
+            # Initialize directories
             output_dir.mkdir(parents=True, exist_ok=True)
+            code_dir = output_dir / "code"
+            code_dir.mkdir(parents=True, exist_ok=True)
             
-            # Agent execution sequence
-            agents = ["analyst", "pm", "architect", "po", "sm", "dev", "qa"]
+            log_and_broadcast("info", f"📁 Dossier de sortie: {output_dir}")
             
-            for agent_name in agents:
+            # Save pipeline state for resume capability
+            state_file = output_dir / ".bmad_state.json"
+            
+            # Agent execution sequence with descriptions
+            agents = [
+                ("analyst", "📊 Analyste", "Crée le brief projet"),
+                ("pm", "📋 Product Manager", "Rédige le PRD (Product Requirements Document)"),
+                ("architect", "🏗️ Architecte", "Conçoit l'architecture technique"),
+                ("po", "🎯 Product Owner", "Découpe en epics"),
+                ("sm", "📝 Scrum Master", "Crée les user stories"),
+                ("dev", "💻 Développeur", "Génère le code"),
+                ("qa", "🔍 QA Engineer", "Teste et valide"),
+            ]
+            
+            for idx, (agent_name, agent_label, agent_desc) in enumerate(agents):
                 _bmad_runtime.set_agent(agent_name)
-                broadcast("agent_start", {"agent": agent_name})
+                log_and_broadcast("info", f"▶️ {agent_label} - {agent_desc}", agent_name)
+                broadcast("agent_start", {"agent": agent_name, "progress": (idx / len(agents)) * 100})
+                
+                start_time = time.time()
                 
                 try:
-                    # Run through orchestrator's run_bmad_cycle
-                    # For now, we simulate individual steps
+                    # Run agent
                     artifact_path = _run_single_agent(state, agent_name, body.goal, output_dir)
+                    
+                    elapsed = time.time() - start_time
+                    
+                    # Log artifact details
+                    if artifact_path.exists():
+                        content = artifact_path.read_text(encoding="utf-8")
+                        preview = content[:500] + "..." if len(content) > 500 else content
+                        log_and_broadcast(
+                            "success", 
+                            f"✅ {agent_label} terminé en {elapsed:.1f}s",
+                            agent_name,
+                            {"artifact": str(artifact_path.name), "preview": preview, "size": len(content)}
+                        )
+                    else:
+                        log_and_broadcast("success", f"✅ {agent_label} terminé en {elapsed:.1f}s", agent_name)
                     
                     _bmad_runtime.complete_agent(agent_name, str(artifact_path))
                     broadcast("agent_done", {
                         "agent": agent_name,
-                        "artifact": str(artifact_path)
+                        "artifact": str(artifact_path),
+                        "elapsed_seconds": elapsed
                     })
                     
+                    # Save state for resume
+                    state_file.write_text(json.dumps(_bmad_runtime.get_state_for_persistence(), indent=2))
+                    
                 except Exception as e:
-                    logger.error(f"Agent {agent_name} failed: {e}")
-                    _bmad_runtime.set_error(f"{agent_name}: {e}")
+                    elapsed = time.time() - start_time
+                    error_msg = f"{agent_name}: {str(e)}"
+                    logger.error(f"Agent {agent_name} failed: {e}", exc_info=True)
+                    
+                    log_and_broadcast(
+                        "error", 
+                        f"❌ {agent_label} a échoué après {elapsed:.1f}s: {str(e)[:200]}",
+                        agent_name,
+                        {"error": str(e), "traceback": str(e.__traceback__) if e.__traceback__ else None}
+                    )
+                    
+                    _bmad_runtime.set_error(error_msg)
                     broadcast("agent_error", {"agent": agent_name, "error": str(e)})
-                    # Continue with next agent
+                    
+                    # Save state even on error
+                    state_file.write_text(json.dumps(_bmad_runtime.get_state_for_persistence(), indent=2))
+                    # Continue with next agent (continuous mode)
+            
+            # Final summary
+            completed = _bmad_runtime.status["agents_completed"]
+            artifacts = _bmad_runtime.status["artifacts_generated"]
+            
+            log_and_broadcast("info", f"🏁 Pipeline terminé: {len(completed)}/{len(agents)} agents complétés")
+            log_and_broadcast("info", f"📦 Artifacts générés: {len(artifacts)}")
+            
+            # List generated files
+            all_files = list(output_dir.rglob("*"))
+            file_list = [str(f.relative_to(output_dir)) for f in all_files if f.is_file()]
+            log_and_broadcast("info", f"📂 Fichiers créés: {len(file_list)}", details={"files": file_list[:20]})
             
             broadcast("complete", {
-                "status": "success",
-                "artifacts": _bmad_runtime.status["artifacts_generated"]
+                "status": "success" if len(completed) == len(agents) else "partial",
+                "artifacts": artifacts,
+                "files_created": file_list
             })
         
         except Exception as e:
-            logger.error(f"BMAD workflow failed: {e}")
+            logger.error(f"BMAD workflow failed: {e}", exc_info=True)
+            log_and_broadcast("error", f"💥 Pipeline échoué: {str(e)}")
             _bmad_runtime.set_error(str(e))
             broadcast("error", {"error": str(e)})
         

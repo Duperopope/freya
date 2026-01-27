@@ -17,11 +17,20 @@ interface BenchProgress {
   progress_percent: number
 }
 
+interface BMADLog {
+  timestamp: string
+  level: string
+  agent: string | null
+  message: string
+  details?: Record<string, unknown>
+}
+
 interface BMADProgress {
   running: boolean
   current_agent: string | null
   agents_completed: string[]
   artifacts_generated: string[]
+  logs?: BMADLog[]
 }
 
 // Persisted bench results
