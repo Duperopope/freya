@@ -107,13 +107,16 @@ export function ChatPage() {
   const abortControllerRef = useRef<AbortController | null>(null)
   
   // Load conversations from localStorage on mount
+  // FIXED: Properly validate currentConversationId exists in loaded conversations
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.CONVERSATIONS)
+      let loadedConversations: Conversation[] = []
+      
       if (saved) {
         const parsed = JSON.parse(saved)
         // Convert date strings back to Date objects
-        const convs = parsed.map((c: any) => ({
+        loadedConversations = parsed.map((c: any) => ({
           ...c,
           createdAt: new Date(c.createdAt),
           updatedAt: new Date(c.updatedAt),
@@ -122,12 +125,22 @@ export function ChatPage() {
             timestamp: new Date(m.timestamp)
           }))
         }))
-        setConversations(convs)
+        setConversations(loadedConversations)
       }
       
       const currentId = localStorage.getItem(STORAGE_KEYS.CURRENT_CONVERSATION)
       if (currentId) {
-        setCurrentConversationId(currentId)
+        // IMPORTANT: Verify the conversation still exists before setting it
+        const convExists = loadedConversations.some(c => c.id === currentId)
+        if (convExists) {
+          setCurrentConversationId(currentId)
+        } else {
+          // Conversation was deleted, clear the stale reference
+          console.log('[Chat] Clearing stale conversation ID:', currentId)
+          localStorage.removeItem(STORAGE_KEYS.CURRENT_CONVERSATION)
+          setCurrentConversationId(null)
+          setMessages([])
+        }
       }
       
       // Load chat settings
@@ -140,6 +153,10 @@ export function ChatPage() {
       }
     } catch (e) {
       console.error('Failed to load chat history:', e)
+      // On error, reset to clean state
+      setConversations([])
+      setCurrentConversationId(null)
+      setMessages([])
     }
   }, [])
   
@@ -665,13 +682,33 @@ Reflection ${i + 1}/${reflectionDepth}:`
     setIsProcessingMulti(false)
   }
   
-  // Research mode: Internet search → Analysis → BMAD Analyst briefing - FIXED: proper async execution
+  // Research mode: Internet search → Analysis → BMAD Analyst briefing - IMPROVED with real-time logging
   const handleResearchChat = async (text: string) => {
     if (!text.trim()) return
     
     console.log('[Research] Starting research for:', text)
     setIsProcessingMulti(true)
     setResearchPhase('searching')
+    
+    // Helper to add progress logs
+    const addProgressLog = (content: string) => {
+      const logId = `research-log-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
+      const logMsg: Message = {
+        id: logId,
+        role: 'system',
+        content: content,
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, logMsg])
+      return logId
+    }
+    
+    // Helper to update a log message
+    const updateLogMsg = (msgId: string, newContent: string) => {
+      setMessages(prev => prev.map(m => 
+        m.id === msgId ? { ...m, content: newContent } : m
+      ))
+    }
     
     // Add user message
     const userMessage: Message = {
@@ -687,75 +724,68 @@ Reflection ${i + 1}/${reflectionDepth}:`
     })
     setInput('')
     
-    // Phase 1: Web Search for market research
-    const searchMsgId = `research-search-${Date.now()}`
-    const searchMsg: Message = {
-      id: searchMsgId,
-      role: 'system',
-      content: `🔍 **Phase 1/4: Recherche Internet**\n\nRecherche en cours pour: "${text}"...\n\n⏳ Connexion aux sources...`,
-      timestamp: new Date(),
-    }
-    setMessages(prev => [...prev, searchMsg])
+    // Phase 1: Web Search for market research with detailed progress
+    addProgressLog(`🔍 **Phase 1/4: Recherche Internet**\n\n📡 Lancement des recherches pour: "${text}"`)
     
     let allSearchResults: api.SearchResult[] = []
     
     try {
       console.log('[Research] Phase 1: Starting web search')
-      // Search for market opportunities - with error handling for each search
+      // Search for market opportunities - with detailed progress for each search
       let marketSearch: api.SearchResult[] = []
       let techSearch: api.SearchResult[] = []
       let competitorSearch: api.SearchResult[] = []
       
+      let searchLogId = addProgressLog(`_🔎 Recherche marché: "${text} market opportunity"..._`)
       try {
         marketSearch = await api.webSearch(`${text} application market opportunity 2024 2025`, 5)
+        updateLogMsg(searchLogId, `✓ Opportunités marché: ${marketSearch.length} résultats`)
         console.log('[Research] Market search results:', marketSearch.length)
       } catch (e) {
+        updateLogMsg(searchLogId, `⚠️ Recherche marché: échec (${e instanceof Error ? e.message : 'erreur'})`)
         console.warn('[Research] Market search failed:', e)
       }
       
+      searchLogId = addProgressLog(`_🔎 Recherche technique: "no-code low-code"..._`)
       try {
         techSearch = await api.webSearch(`${text} technical feasibility no-code low-code`, 5)
+        updateLogMsg(searchLogId, `✓ Faisabilité technique: ${techSearch.length} résultats`)
         console.log('[Research] Tech search results:', techSearch.length)
       } catch (e) {
+        updateLogMsg(searchLogId, `⚠️ Recherche technique: échec`)
         console.warn('[Research] Tech search failed:', e)
       }
       
+      searchLogId = addProgressLog(`_🔎 Recherche concurrence: "competitors alternatives"..._`)
       try {
         competitorSearch = await api.webSearch(`${text} competitors alternatives pricing`, 5)
+        updateLogMsg(searchLogId, `✓ Analyse concurrentielle: ${competitorSearch.length} résultats`)
         console.log('[Research] Competitor search results:', competitorSearch.length)
       } catch (e) {
+        updateLogMsg(searchLogId, `⚠️ Recherche concurrence: échec`)
         console.warn('[Research] Competitor search failed:', e)
       }
       
       allSearchResults = [...marketSearch, ...techSearch, ...competitorSearch]
       console.log('[Research] Total search results:', allSearchResults.length)
       
-      // Update with results
-      setMessages(prev => prev.map(m => 
-        m.id === searchMsgId 
-          ? { ...m, content: `✅ **Phase 1/4: Recherche Internet**\n\n${allSearchResults.length} résultats trouvés:\n${allSearchResults.slice(0, 5).map(r => `• [${r.title}](${r.url})`).join('\n')}` }
-          : m
-      ))
+      // Summary of search results
+      if (allSearchResults.length > 0) {
+        addProgressLog(`📊 **Résultats compilés:** ${allSearchResults.length} sources trouvées\n\n${allSearchResults.slice(0, 5).map((r, i) => `${i+1}. ${r.title}`).join('\n')}`)
+      } else {
+        addProgressLog(`⚠️ Aucun résultat de recherche. L'analyse continuera avec les connaissances générales.`)
+      }
     } catch (e) {
       console.error('[Research] Search error:', e)
-      setMessages(prev => prev.map(m => 
-        m.id === searchMsgId 
-          ? { ...m, content: `⚠️ **Phase 1/4: Recherche Internet**\n\nRecherche limitée (${e instanceof Error ? e.message : 'erreur'}). Continuation avec analyse générale...` }
-          : m
-      ))
+      addProgressLog(`⚠️ **Recherche Internet limitée**\n\nErreur: ${e instanceof Error ? e.message : 'erreur'}. Continuation avec analyse générale...`)
     }
     
     // Phase 2: Analysis by Research Analyst
     console.log('[Research] Phase 2: Starting analysis')
     setResearchPhase('analyzing')
-    const analysisMsgId = `research-analysis-${Date.now()}`
-    const analysisMsg: Message = {
-      id: analysisMsgId,
-      role: 'system',
-      content: `🧠 **Phase 2/4: Analyse de Marché**\n\nL'Analyste de Recherche examine les opportunités...\n\n⏳ Analyse en cours...`,
-      timestamp: new Date(),
-    }
-    setMessages(prev => [...prev, analysisMsg])
+    
+    addProgressLog(`\n🧠 **Phase 2/4: Analyse de Marché**`)
+    const analysisMsgId = addProgressLog(`_💭 L'Analyste de Recherche examine ${allSearchResults.length} sources..._`)
     
     // Small delay to ensure UI updates
     await new Promise(resolve => setTimeout(resolve, 100))
@@ -787,6 +817,9 @@ Fournis une analyse structurée et actionnable.`
       const analysisContentForBrief = analysisData.content
       setResearchAnalysis(analysisContentForBrief)
       
+      // Update progress log
+      updateLogMsg(analysisMsgId, `✓ Analyse terminée (${analysisData.model})`)
+      
       const analysisResult: Message = {
         id: `research-result-${Date.now()}`,
         role: 'assistant',
@@ -796,11 +829,8 @@ Fournis une analyse structurée et actionnable.`
         agentName: 'Research Analyst',
       }
       
-      // Remove processing message and add result
-      setMessages(prev => {
-        const filtered = prev.filter(m => m.id !== analysisMsgId)
-        return [...filtered, analysisResult]
-      })
+      // Add result
+      setMessages(prev => [...prev, analysisResult])
       
       // Small delay between phases
       await new Promise(resolve => setTimeout(resolve, 300))
@@ -808,14 +838,9 @@ Fournis une analyse structurée et actionnable.`
       // Phase 3: Briefing for BMAD Analyst (inside the try block to use analysisContentForBrief)
       console.log('[Research] Phase 3: Starting briefing')
       setResearchPhase('briefing')
-      const briefingMsgId = `research-briefing-${Date.now()}`
-      const briefingMsg: Message = {
-        id: briefingMsgId,
-        role: 'system',
-        content: `📋 **Phase 3/4: Préparation du Brief BMAD**\n\n⏳ Génération en cours...`,
-        timestamp: new Date(),
-      }
-      setMessages(prev => [...prev, briefingMsg])
+      
+      addProgressLog(`\n📋 **Phase 3/4: Préparation du Brief BMAD**`)
+      const briefingMsgId = addProgressLog(`_✍️ Génération du brief projet..._`)
       
       // Small delay to ensure UI updates
       await new Promise(resolve => setTimeout(resolve, 100))
@@ -844,11 +869,12 @@ Format: Brief concis et actionnable pour démarrer un projet BMAD.`
         })
         
         console.log('[Research] Phase 4: BMAD ready')
+        updateLogMsg(briefingMsgId, `✓ Brief généré (${briefData.model})`)
         
         const briefResult: Message = {
           id: `research-brief-${Date.now()}`,
           role: 'synthesis',
-          content: `## 📋 Brief Projet BMAD\n\n${briefData.content}\n\n---\n\n🚀 **Prêt à lancer le projet BMAD?** Cliquez sur "Lancer BMAD" pour transférer ce brief à l'équipe BMAD.`,
+          content: `## 📋 Brief Projet BMAD\n\n${briefData.content}`,
           timestamp: new Date(),
           model: briefData.model,
           agentName: 'Strategic Brief',
@@ -864,67 +890,87 @@ Format: Brief concis et actionnable pour démarrer un projet BMAD.`
         })
         
         setMessages(prev => {
-          const filtered = prev.filter(m => m.id !== briefingMsgId)
-          const newMsgs = [...filtered, briefResult]
+          const newMsgs = [...prev, briefResult]
           updateConversation(newMsgs)
           return newMsgs
         })
         
+        // Final success message
+        addProgressLog(`\n🚀 **Phase 4/4: Prêt pour BMAD**\n\n✅ Recherche complète! Allez dans l'onglet **BMAD Studio** pour lancer la génération du projet.`)
+        
         setResearchPhase('bmad_ready')
       } catch (briefError) {
         console.error('[Research] Briefing error:', briefError)
-        setMessages(prev => prev.map(m => 
-          m.id === briefingMsgId 
-            ? { ...m, content: `❌ **Phase 3/4: Brief échoué**\n\n${briefError instanceof Error ? briefError.message : 'Erreur'}` }
-            : m
-        ))
+        updateLogMsg(briefingMsgId, `❌ Brief échoué: ${briefError instanceof Error ? briefError.message : 'Erreur'}`)
       }
       
     } catch (e) {
       console.error('[Research] Analysis error:', e)
-      setMessages(prev => prev.map(m => 
-        m.id === analysisMsgId 
-          ? { ...m, content: `❌ **Phase 2/4: Analyse échouée**\n\n${e instanceof Error ? e.message : 'Erreur inconnue'}` }
-          : m
-      ))
+      updateLogMsg(analysisMsgId, `❌ Analyse échouée: ${e instanceof Error ? e.message : 'Erreur inconnue'}`)
     }
     
     setIsProcessingMulti(false)
   }
   
   // Autonomous Research mode: auto-search for app ideas, analyze, and send to BMAD
+  // IMPROVED: Real-time detailed logging like modern LLMs
   const handleAutonomousResearch = async () => {
     setAutonomousRunning(true)
     setAutonomousIteration(1)
     setResearchPhase('searching')
     
-    const autoSearchMsg: Message = {
-      id: `auto-search-${Date.now()}`,
-      role: 'system',
-      content: `🤖 **Mode Autonome Activé**\n\nRecherche automatique d'opportunités d'applications rentables...`,
-      timestamp: new Date(),
+    // Helper to add log messages with timestamps
+    const addLog = (content: string, isProgress = false) => {
+      const logMsg: Message = {
+        id: `auto-log-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        role: 'system',
+        content: isProgress ? `_${content}_` : content,
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, logMsg])
+      return logMsg.id
     }
-    setMessages(prev => [...prev, autoSearchMsg])
+    
+    // Helper to update existing message
+    const updateLog = (msgId: string, newContent: string) => {
+      setMessages(prev => prev.map(m => 
+        m.id === msgId ? { ...m, content: newContent } : m
+      ))
+    }
+    
+    addLog(`🤖 **Mode Autonome Activé**\n\n🔄 Initialisation de la recherche automatique d'opportunités...`)
     
     try {
-      // Phase 1: Search for trending app ideas
+      // Phase 1: Search for trending app ideas with detailed logging
+      addLog(`📡 **Phase 1/4: Recherche Web**`)
+      
+      let searchId = addLog(`🔍 Recherche: "trending SaaS ideas 2024 2025 profitable"...`, true)
       const trendingSearch = await api.webSearch('trending SaaS ideas 2024 2025 profitable', 5)
+      updateLog(searchId, `✓ Tendances SaaS: ${trendingSearch.length} résultats`)
+      
+      if (!autonomousRunning) { addLog(`⏹️ Arrêté par l'utilisateur`); return }
+      
+      searchId = addLog(`🔍 Recherche: "software market gaps opportunities"...`, true)
       const gapSearch = await api.webSearch('software market gaps opportunities underserved', 5)
+      updateLog(searchId, `✓ Opportunités marché: ${gapSearch.length} résultats`)
+      
+      if (!autonomousRunning) { addLog(`⏹️ Arrêté par l'utilisateur`); return }
+      
+      searchId = addLog(`🔍 Recherche: "no-code low-code app ideas"...`, true)
       const techSearch = await api.webSearch('no-code low-code app ideas for developers', 5)
+      updateLog(searchId, `✓ Apps no-code: ${techSearch.length} résultats`)
       
       const allResults = [...trendingSearch, ...gapSearch, ...techSearch]
       
-      // Update search results
-      setMessages(prev => prev.map(m => 
-        m.id === autoSearchMsg.id 
-          ? { ...m, content: `✅ **Recherche terminée**\n\n${allResults.length} opportunités identifiées:\n${allResults.slice(0, 5).map(r => `• ${r.title}`).join('\n')}` }
-          : m
-      ))
+      addLog(`📊 **Résultats compilés:** ${allResults.length} opportunités trouvées\n\n${allResults.slice(0, 6).map((r, i) => `${i+1}. ${r.title}`).join('\n')}`)
       
-      if (!autonomousRunning) return // Check if stopped
+      if (!autonomousRunning) { addLog(`⏹️ Arrêté par l'utilisateur`); return }
       
       // Phase 2: AI selects the best idea
       setResearchPhase('analyzing')
+      addLog(`🧠 **Phase 2/4: Analyse par IA**`)
+      const analysisId = addLog(`💭 L'IA analyse les ${allResults.length} opportunités et sélectionne la meilleure...`, true)
+      
       const selectionPrompt = `Based on these market opportunities, select the ONE most promising app idea that:
 1. Has clear market demand
 2. Is technically feasible with modern tools
@@ -943,11 +989,13 @@ Respond with:
 
       const selectionData = await api.generateChat({
         message: selectionPrompt,
-        system_prompt: 'You are an expert startup advisor selecting the most viable app idea.',
+        system_prompt: 'You are an expert startup advisor selecting the most viable app idea. Be concise but thorough.',
         max_tokens: 1024,
       })
       
-      if (!autonomousRunning) return
+      updateLog(analysisId, `✓ Analyse terminée (${selectionData.model})`)
+      
+      if (!autonomousRunning) { addLog(`⏹️ Arrêté par l'utilisateur`); return }
       
       const ideaMsg: Message = {
         id: `auto-idea-${Date.now()}`,
@@ -961,6 +1009,9 @@ Respond with:
       
       // Phase 3: Prepare BMAD brief
       setResearchPhase('briefing')
+      addLog(`📋 **Phase 3/4: Génération du Brief BMAD**`)
+      const briefId = addLog(`✍️ Création du brief structuré pour le pipeline BMAD...`, true)
+      
       const briefPrompt = `Convert this selected idea into a BMAD project brief:
 
 ${selectionData.content}
@@ -975,19 +1026,24 @@ Create a structured brief with:
 
       const briefData = await api.generateChat({
         message: briefPrompt,
-        system_prompt: 'You are a product strategist creating actionable project briefs.',
+        system_prompt: 'You are a product strategist creating actionable project briefs. Be specific and practical.',
         max_tokens: 1500,
       })
+      
+      updateLog(briefId, `✓ Brief généré (${briefData.model})`)
       
       const briefMsg: Message = {
         id: `auto-brief-${Date.now()}`,
         role: 'synthesis',
-        content: `## 📋 Brief BMAD Auto-Généré\n\n${briefData.content}\n\n---\n\n🚀 **Prêt pour le pipeline BMAD** - Le brief sera transféré automatiquement.`,
+        content: `## 📋 Brief BMAD Auto-Généré\n\n${briefData.content}`,
         timestamp: new Date(),
         model: briefData.model,
         agentName: 'Autonomous Brief',
       }
       setMessages(prev => [...prev, briefMsg])
+      
+      // Phase 4: Ready for BMAD
+      addLog(`🚀 **Phase 4/4: Prêt pour BMAD**\n\n✅ Le brief a été préparé et sera transféré au pipeline BMAD.\n\n➡️ Allez dans l'onglet **BMAD Studio** pour lancer la génération du projet.`)
       
       // Update global state for BMAD integration
       setResearchState({
@@ -1003,13 +1059,11 @@ Create a structured brief with:
       
     } catch (e) {
       console.error('[Autonomous] Error:', e)
-      const errorMsg: Message = {
-        id: `auto-error-${Date.now()}`,
-        role: 'system',
-        content: `❌ **Erreur en mode autonome:** ${e instanceof Error ? e.message : 'Erreur inconnue'}`,
-        timestamp: new Date(),
-      }
-      setMessages(prev => [...prev, errorMsg])
+      const errorDetails = e instanceof Error 
+        ? `${e.message}${e.stack ? '\n\nStack: ' + e.stack.split('\n').slice(0, 3).join('\n') : ''}`
+        : 'Erreur inconnue'
+      
+      addLog(`❌ **Erreur en mode autonome:**\n\n\`\`\`\n${errorDetails}\n\`\`\`\n\n💡 **Solutions possibles:**\n- Vérifiez que Ollama est démarré\n- Vérifiez votre connexion internet pour la recherche web\n- Réessayez dans quelques secondes`)
     }
     
     setAutonomousRunning(false)
