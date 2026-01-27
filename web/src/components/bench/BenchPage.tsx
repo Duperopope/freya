@@ -1594,43 +1594,93 @@ export function BenchPage() {
         )}
       </div>
 
-      {/* Import Dialog */}
+      {/* Import Dialog - Enhanced with External Benchmarks */}
       {showImportDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-freya-bg-secondary rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+          <div className="bg-freya-bg-secondary rounded-lg p-6 max-w-2xl w-full mx-4 shadow-xl max-h-[80vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-freya-text-primary mb-4">
-              Import Benchmark Data
+              Import & External Benchmarks
             </h3>
-            <p className="text-sm text-freya-text-muted mb-4">
-              Import benchmark results from external sources. Supported formats:
-            </p>
-            <ul className="text-sm text-freya-text-secondary mb-4 space-y-1">
-              <li>• <strong>MMLU</strong> - Massive Multitask Language Understanding</li>
-              <li>• <strong>HellaSwag</strong> - Commonsense reasoning benchmark</li>
-              <li>• <strong>Custom JSON</strong> - Freya export format</li>
-              <li>• <strong>CSV</strong> - Spreadsheet format</li>
-            </ul>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,.csv"
-              onChange={handleImport}
-              className="hidden"
-            />
-            <div className="flex gap-3">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="btn-primary flex-1 flex items-center justify-center gap-2"
-              >
-                <Upload className="w-4 h-4" />
-                Select File
-              </button>
-              <button
-                onClick={() => setShowImportDialog(false)}
-                className="btn-ghost"
-              >
-                Cancel
-              </button>
+            
+            {/* External Benchmarks Section */}
+            <div className="mb-6">
+              <h4 className="text-sm font-medium text-freya-text-secondary mb-3">Pre-integrated External Benchmarks (v2.5)</h4>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { name: 'MMLU', desc: 'Multi-task language understanding', integrated: true, metrics: ['accuracy'] },
+                  { name: 'HellaSwag', desc: 'Commonsense reasoning', integrated: true, metrics: ['accuracy'] },
+                  { name: 'TruthfulQA', desc: 'Truthfulness & factuality', integrated: true, metrics: ['mc1', 'mc2'] },
+                  { name: 'GSM8K', desc: 'Grade school math', integrated: true, metrics: ['accuracy'] },
+                  { name: 'HumanEval', desc: 'Code generation', integrated: true, metrics: ['pass@1'] },
+                  { name: 'MBPP', desc: 'Basic programming', integrated: true, metrics: ['pass@1'] },
+                  { name: 'ARC-Challenge', desc: 'Advanced reasoning', integrated: true, metrics: ['accuracy'] },
+                  { name: 'MT-Bench', desc: 'Multi-turn conversation', integrated: true, metrics: ['avg_score'] },
+                  { name: 'Chatbot Arena', desc: 'Human preference (ELO)', integrated: false, metrics: ['elo'] },
+                  { name: 'WinoGrande', desc: 'Adversarial commonsense', integrated: true, metrics: ['accuracy'] },
+                ].map(bench => (
+                  <div key={bench.name} className={clsx(
+                    'p-3 rounded-lg border',
+                    bench.integrated 
+                      ? 'bg-freya-accent-green/10 border-freya-accent-green/30'
+                      : 'bg-freya-bg-tertiary border-freya-border'
+                  )}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium text-freya-text-primary text-sm">{bench.name}</span>
+                      {bench.integrated ? (
+                        <span className="badge badge-green text-xs">Integrated</span>
+                      ) : (
+                        <span className="badge badge-yellow text-xs">Manual</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-freya-text-muted">{bench.desc}</p>
+                    <div className="flex gap-1 mt-2">
+                      {bench.metrics.map(m => (
+                        <span key={m} className="badge badge-blue text-xs">{m}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-freya-text-muted mt-3 flex items-center gap-1">
+                <Info className="w-3 h-3" />
+                Integrated benchmarks automatically compare your models against public leaderboard data
+              </p>
+            </div>
+            
+            {/* File Import Section */}
+            <div className="border-t border-freya-border pt-4">
+              <h4 className="text-sm font-medium text-freya-text-secondary mb-3">Import Custom Results</h4>
+              <p className="text-sm text-freya-text-muted mb-4">
+                Import benchmark results from files. Supported formats:
+              </p>
+              <ul className="text-sm text-freya-text-secondary mb-4 space-y-1">
+                <li>• <strong>MMLU JSON</strong> - Standard MMLU evaluation output</li>
+                <li>• <strong>lm-evaluation-harness</strong> - EleutherAI format</li>
+                <li>• <strong>Custom JSON</strong> - Freya export format</li>
+                <li>• <strong>CSV</strong> - Spreadsheet with model, score, task columns</li>
+              </ul>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,.csv"
+                onChange={handleImport}
+                className="hidden"
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="btn-primary flex-1 flex items-center justify-center gap-2"
+                >
+                  <Upload className="w-4 h-4" />
+                  Select File
+                </button>
+                <button
+                  onClick={() => setShowImportDialog(false)}
+                  className="btn-ghost"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>

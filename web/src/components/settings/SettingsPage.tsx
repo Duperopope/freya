@@ -93,7 +93,28 @@ const DEFAULT_GLOBAL_SETTINGS = {
   localMinScore: 70,
   fallbackChain: ['groq', 'hf', 'together', 'local'],
   maxRetries: 3,
+  // Best Agent settings (v2.5)
+  bestAgentEnabled: false,
+  bestAgentAutoSelect: true,
+  bestAgentMinScore: 75,
+  preferredAgentStyle: 'balanced', // 'fast' | 'balanced' | 'quality'
 }
+
+// Agent role definitions with enhanced intelligence configs (v2.5)
+const AGENT_ROLES = [
+  { id: 'analyst', name: 'Analyst', description: 'Requirements analysis, stakeholder identification', icon: '📊', color: 'blue' },
+  { id: 'pm', name: 'Product Manager', description: 'Product requirements, feature planning', icon: '📋', color: 'green' },
+  { id: 'architect', name: 'Architect', description: 'System design, technical architecture', icon: '🏗️', color: 'purple' },
+  { id: 'po', name: 'Product Owner', description: 'Epic breakdown, feature prioritization', icon: '🎯', color: 'yellow' },
+  { id: 'sm', name: 'Scrum Master', description: 'User stories, sprint planning', icon: '📝', color: 'cyan' },
+  { id: 'dev', name: 'Developer', description: 'Code implementation, clean code', icon: '💻', color: 'red' },
+  { id: 'qa', name: 'QA Engineer', description: 'Quality assurance, test coverage', icon: '🔍', color: 'orange' },
+  // New agents for v2.5
+  { id: 'security', name: 'Security Expert', description: 'Security analysis, vulnerability assessment', icon: '🔐', color: 'red' },
+  { id: 'devops', name: 'DevOps Engineer', description: 'CI/CD, infrastructure, deployment', icon: '⚙️', color: 'purple' },
+  { id: 'ux', name: 'UX Designer', description: 'User experience, interface design', icon: '🎨', color: 'pink' },
+  { id: 'data', name: 'Data Scientist', description: 'Data analysis, ML model evaluation', icon: '📈', color: 'green' },
+]
 
 export function SettingsPage() {
   const queryClient = useQueryClient()
@@ -711,6 +732,106 @@ export function SettingsPage() {
                 </div>
               </div>
 
+              {/* Best Agent Configuration (v2.5) */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <h4 className="font-medium text-freya-text-primary mb-4 flex items-center gap-2">
+                  <Brain className="w-5 h-5 text-freya-accent-yellow" />
+                  Best Agent (Chat)
+                </h4>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-freya-bg-primary rounded-lg">
+                    <div>
+                      <div className="font-medium text-freya-text-primary">Enable Best Agent</div>
+                      <div className="text-sm text-freya-text-muted">Automatically select the best model for each task</div>
+                    </div>
+                    <button
+                      onClick={() => saveGlobalSettings({ ...globalSettings, bestAgentEnabled: !globalSettings.bestAgentEnabled })}
+                      className={clsx(
+                        'relative w-12 h-6 rounded-full transition-colors',
+                        globalSettings.bestAgentEnabled ? 'bg-freya-accent-green' : 'bg-freya-bg-tertiary'
+                      )}
+                    >
+                      <div className={clsx(
+                        'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform',
+                        globalSettings.bestAgentEnabled ? 'translate-x-7' : 'translate-x-1'
+                      )} />
+                    </button>
+                  </div>
+                  
+                  {globalSettings.bestAgentEnabled && (
+                    <>
+                      <div className="flex items-center justify-between p-3 bg-freya-bg-primary rounded-lg">
+                        <div>
+                          <div className="font-medium text-freya-text-primary">Auto-Select Model</div>
+                          <div className="text-sm text-freya-text-muted">Let Freya choose the best model automatically</div>
+                        </div>
+                        <button
+                          onClick={() => saveGlobalSettings({ ...globalSettings, bestAgentAutoSelect: !globalSettings.bestAgentAutoSelect })}
+                          className={clsx(
+                            'relative w-12 h-6 rounded-full transition-colors',
+                            globalSettings.bestAgentAutoSelect ? 'bg-freya-accent-green' : 'bg-freya-bg-tertiary'
+                          )}
+                        >
+                          <div className={clsx(
+                            'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform',
+                            globalSettings.bestAgentAutoSelect ? 'translate-x-7' : 'translate-x-1'
+                          )} />
+                        </button>
+                      </div>
+                      
+                      <div className="p-3 bg-freya-bg-primary rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <div className="font-medium text-freya-text-primary">Minimum Score Threshold</div>
+                            <div className="text-sm text-freya-text-muted">Only use models with benchmark score ≥ this value</div>
+                          </div>
+                          <span className="badge badge-yellow">{globalSettings.bestAgentMinScore}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="50"
+                          max="95"
+                          value={globalSettings.bestAgentMinScore}
+                          onChange={(e) => saveGlobalSettings({ ...globalSettings, bestAgentMinScore: parseInt(e.target.value) })}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-freya-text-muted mt-1">
+                          <span>50 (Lenient)</span>
+                          <span>75</span>
+                          <span>95 (Strict)</span>
+                        </div>
+                      </div>
+                      
+                      <div className="p-3 bg-freya-bg-primary rounded-lg">
+                        <div className="font-medium text-freya-text-primary mb-2">Agent Style Preference</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            { id: 'fast', name: 'Fast', desc: 'Prioritize speed', icon: '⚡' },
+                            { id: 'balanced', name: 'Balanced', desc: 'Speed & quality', icon: '⚖️' },
+                            { id: 'quality', name: 'Quality', desc: 'Best results', icon: '🎯' },
+                          ].map(style => (
+                            <button
+                              key={style.id}
+                              onClick={() => saveGlobalSettings({ ...globalSettings, preferredAgentStyle: style.id })}
+                              className={clsx(
+                                'p-3 rounded-lg border-2 text-center transition-all',
+                                globalSettings.preferredAgentStyle === style.id
+                                  ? 'border-freya-accent-blue bg-freya-accent-blue/10'
+                                  : 'border-freya-border hover:border-freya-border-light'
+                              )}
+                            >
+                              <div className="text-lg mb-1">{style.icon}</div>
+                              <div className="text-sm font-medium text-freya-text-primary">{style.name}</div>
+                              <div className="text-xs text-freya-text-muted">{style.desc}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
               {/* Info */}
               <div className="p-4 bg-freya-bg-tertiary rounded-lg border border-freya-border">
                 <div className="flex items-start gap-3">
@@ -903,12 +1024,25 @@ export function SettingsPage() {
               <div>
                 <h3 className="text-xl font-semibold text-freya-text-primary mb-2">Model Routing</h3>
                 <p className="text-freya-text-muted">
-                  Configure which model to use for each BMAD role. You can manually override recommendations.
+                  Configure which model to use for each BMAD role. Includes new v2.5 agent roles.
                 </p>
+              </div>
+              
+              {/* Agent Categories */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <h4 className="font-medium text-freya-text-primary mb-3">Available Agent Roles</h4>
+                <div className="grid grid-cols-4 gap-2">
+                  {AGENT_ROLES.map(agent => (
+                    <div key={agent.id} className="p-2 bg-freya-bg-primary rounded-lg text-center">
+                      <div className="text-lg mb-1">{agent.icon}</div>
+                      <div className="text-xs font-medium text-freya-text-primary">{agent.name}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="space-y-3">
-                {['analyst', 'pm', 'architect', 'po', 'sm', 'dev', 'qa'].map((role) => {
+                {AGENT_ROLES.map(({ id: role, name, description, icon }) => {
                   const config = routing?.find(r => r.role === role)
                   
                   return (
@@ -917,13 +1051,13 @@ export function SettingsPage() {
                       className="flex items-center justify-between p-4 bg-freya-bg-secondary rounded-lg border border-freya-border"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-freya-bg-tertiary flex items-center justify-center">
-                          <Brain className="w-5 h-5 text-freya-accent-blue" />
+                        <div className="w-10 h-10 rounded-lg bg-freya-bg-tertiary flex items-center justify-center text-lg">
+                          {icon}
                         </div>
                         <div>
-                          <div className="font-medium text-freya-text-primary capitalize">{role}</div>
+                          <div className="font-medium text-freya-text-primary">{name}</div>
                           <div className="text-sm text-freya-text-muted">
-                            {config?.model || 'Not configured'}
+                            {config?.model || description}
                           </div>
                         </div>
                       </div>

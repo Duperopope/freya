@@ -1,10 +1,10 @@
-# Freya 2.2
+# Freya 2.5.5
 
 [![English](https://img.shields.io/badge/Language-English-blue.svg)](README.md) [![Français](https://img.shields.io/badge/Langue-Français-red.svg)](README.fr.md)
 
 [![Built with AI](https://img.shields.io/badge/Built%20with-AI-FF6B6B.svg)](https://github.com/features/copilot) [![AI-Powered](https://img.shields.io/badge/AI--Powered-Yes-9C88FF.svg)](https://ollama.ai) [![Ollama](https://img.shields.io/badge/Powered%20by-Ollama-00ADD8.svg)](https://ollama.ai) [![Llama.cpp](https://img.shields.io/badge/Supports-Llama.cpp-FF6B35.svg)](https://github.com/ggerganov/llama.cpp)
 
-[![Version](https://img.shields.io/badge/Version-2.2.0-green.svg)](#) [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org) [![React](https://img.shields.io/badge/React-18-61DAFB.svg)](https://react.dev) [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688.svg)](https://fastapi.tiangolo.com) [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)](https://typescriptlang.org) [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4+-38BDF8.svg)](https://tailwindcss.com)
+[![Version](https://img.shields.io/badge/Version-2.5.5-green.svg)](#) [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org) [![React](https://img.shields.io/badge/React-18-61DAFB.svg)](https://react.dev) [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688.svg)](https://fastapi.tiangolo.com) [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)](https://typescriptlang.org) [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4+-38BDF8.svg)](https://tailwindcss.com)
 
 ---
 
@@ -20,40 +20,88 @@
 
 ---
 
-## What's New in 2.2
+## What's New in 2.5.5
 
-**Freya 2.2** introduces **Hybrid Routing** - intelligent local/remote LLM switching with multi-provider support:
+**Freya 2.5.5** is a major release introducing **CyberAgent**, **Best Agent Mode**, **External Benchmarks Integration**, and extensive improvements across all modules.
 
-### 🚀 Hybrid Routing System
+### 🛡️ CyberAgent - AI Security Analyst (NEW)
 
-- **Intelligent Routing** - Automatically routes between local (Ollama, LM Studio, KoboldCpp) and remote providers
-- **Multi-Provider Support** - Groq, Hugging Face, Together AI with automatic quota management
-- **Free Tier Optimization** - Maximizes usage of free tiers before any paid requests
-- **Fallback Chain** - Configurable fallback: local → groq → hf → together
-- **Consumption Prediction** - ML-based prediction of token usage and costs
+Transform the Cyber Watch dashboard into an intelligent security operations center:
 
-### 🔧 Enhanced Features
+- **AI-Powered Threat Analysis** - Chat with CyberAgent about CVEs, vulnerabilities, and security recommendations
+- **Daily Threat Briefings** - Automated executive summaries with prioritized action items
+- **Batch CVE Analysis** - Select multiple CVEs for comprehensive risk assessment
+- **Quick Security Queries** - Pre-built prompts for common security questions
+- **Remediation Suggestions** - AI-generated patching and mitigation guidance
 
-| Feature | Description |
-|---------|-------------|
-| **Providers Dashboard** | New Settings tab for managing all LLM providers |
-| **Usage Statistics** | Track requests, tokens, and costs per provider |
-| **Local Runtime Detection** | Auto-detect Ollama, LM Studio, KoboldCpp, Oobabooga |
-| **API Key Management** | Secure in-session API key configuration |
-| **Benchmark ETA** | Real-time estimated time remaining during benchmarks |
-| **Continuous Mode Fix** | Benchmark auto-advances correctly: Fast → Standard → Advanced |
+### 🧠 Best Agent Mode (NEW)
 
-### 💬 Chat Improvements
+Intelligent model selection for optimal performance:
 
-- **Web Search Toggle** - Enable/disable web search per message
-- **File Attachments** - Attach code, text, and images to messages
-- **Search Results Display** - See sources used in AI responses
+- **Auto-Select Best Model** - Freya automatically chooses the best-performing model for each task
+- **Benchmark-Based Routing** - Uses your benchmark results to determine optimal models
+- **Configurable Thresholds** - Set minimum score requirements (50-95)
+- **Style Preferences** - Choose Fast, Balanced, or Quality modes
+- **Per-Role Overrides** - Manual control when needed
 
-### 🎯 BMAD Studio Fixes
+### 📊 External Benchmarks Integration (NEW)
 
-- **Editable Goals** - Goal and project name always editable
-- **Persistent Chat** - Brainstorm chat visible throughout pipeline
-- **Continue Brainstorming** - Resume conversations anytime
+Pre-integrated conversational and capability benchmarks:
+
+| Benchmark | Type | Metrics | Status |
+|-----------|------|---------|--------|
+| **MMLU** | Multi-task Language | accuracy | Integrated |
+| **HellaSwag** | Commonsense | accuracy | Integrated |
+| **TruthfulQA** | Factuality | mc1, mc2 | Integrated |
+| **GSM8K** | Math Reasoning | accuracy | Integrated |
+| **HumanEval** | Code Generation | pass@1 | Integrated |
+| **MBPP** | Programming | pass@1 | Integrated |
+| **ARC-Challenge** | Reasoning | accuracy | Integrated |
+| **MT-Bench** | Multi-turn Chat | avg_score | Integrated |
+| **WinoGrande** | Commonsense | accuracy | Integrated |
+| **Chatbot Arena** | Human Preference | ELO | Manual |
+
+### 🤖 Enhanced Agent System
+
+New specialized agents for comprehensive project coverage:
+
+| Agent | Role | Capabilities |
+|-------|------|--------------|
+| **Security Expert** | Security analysis | Threat modeling, vulnerability assessment, compliance |
+| **DevOps Engineer** | Infrastructure | CI/CD, IaC, containerization, monitoring |
+| **UX Designer** | User Experience | User research, wireframing, prototyping |
+| **Data Scientist** | Data/ML | Analysis, ML modeling, visualization |
+
+### 💬 Chat Improvements (v2.5)
+
+- **Research Mode** - Assisted & Autonomous internet research → market analysis → BMAD brief
+- **Exchange Mode** - Two AI models discuss topics autonomously with synthesis
+- **Conversation Export** - JSON export with full metadata
+- **Share Links** - Base64-encoded shareable conversation links
+- **Multi-Agent Cross-Check** - Synthesis agent validates responses from multiple models
+
+### 🔔 Header Enhancements
+
+- **Command Palette** (Ctrl+K) - Quick navigation and search
+- **Notifications Panel** - Real-time alerts for bench, BMAD, and connection status
+
+### 📁 File Browser Improvements
+
+- **Folder Import** - Import entire directories for BMAD pipeline
+- **Progress Tracking** - Visual progress during folder imports
+- **Auto-Filtering** - Automatic text file detection
+
+### ⚙️ Settings Reorganization
+
+Tabs reordered for better workflow:
+1. **Global** - Application-wide defaults including Best Agent config
+2. **Providers & API Keys** - LLM providers, hybrid routing, external APIs (merged)
+3. **Model Routing** - Per-role model assignment with new agent roles
+4. **Ollama** - Local LLM server connection
+5. **Paths** - Directory configuration
+6. **Prompts** - System prompts management
+7. **Appearance** - Themes, fonts, UI preferences
+8. **About** - Version and system info
 
 ---
 
@@ -700,6 +748,52 @@ pytest tests/
 ---
 
 ## Changelog
+
+### v2.5.5 (2026-01-27)
+
+#### Major Features
+- **CyberAgent AI Security Analyst** - Transform Cyber Watch into an intelligent security operations center with AI-powered threat analysis, daily briefings, and remediation suggestions
+- **Best Agent Mode** - Automatic model selection based on benchmark performance with configurable thresholds and style preferences
+- **External Benchmarks Integration** - Pre-integrated support for MMLU, HellaSwag, TruthfulQA, GSM8K, HumanEval, MBPP, ARC-Challenge, MT-Bench, WinoGrande
+- **New Agent Roles** - Security Expert, DevOps Engineer, UX Designer, Data Scientist added to the BMAD pipeline
+
+#### v2.5.0 - v2.5.4 Changes (since v2.2)
+- **Research Mode (v2.5.0)** - Assisted & Autonomous internet research with market analysis and BMAD brief generation
+- **Exchange Mode (v2.5.1)** - Two AI models autonomous discussion with configurable iterations
+- **Conversation Management (v2.5.2)** - Export to JSON, shareable links, conversation history sidebar
+- **Header Notifications (v2.5.3)** - Bell icon with real-time alerts, search palette (Ctrl+K)
+- **File Browser Folder Import (v2.5.4)** - Import entire directories for BMAD with progress tracking
+- **Settings Fusion (v2.5.4)** - Providers & API Keys merged into single tab, removed duplicate routing section
+
+#### Architecture Improvements
+- **Agent Intelligence Profiles** - Configurable temperature, max tokens, and capabilities per agent
+- **Batch CVE Analysis** - Select and analyze multiple vulnerabilities simultaneously
+- **Enhanced Multi-Agent Mode** - Thinking state indicators, collapsible responses, improved synthesis
+- **Conversational Benchmarks** - MT-Bench and Chatbot Arena support for dialogue evaluation
+
+#### UI/UX Enhancements
+- **CyberAgent Panel** - Slide-in panel with chat interface, quick prompts, and analysis modes
+- **Best Agent Settings** - Visual configuration with style preference cards
+- **Agent Role Cards** - Emoji icons and descriptions for all 11 agent roles
+- **External Benchmark Browser** - Visual list with integration status and metrics
+
+#### Bug Fixes
+- Fixed Multi-Agent mode not displaying individual agent responses
+- Fixed conversation persistence across tab switches
+- Fixed benchmark progress exceeding 100%
+- Removed unused imports causing TypeScript errors
+
+---
+
+### v2.2.0 (2026-01-26)
+
+#### Features
+- Hybrid Routing System with multi-provider support
+- Providers Dashboard in Settings
+- Local Runtime Detection (Ollama, LM Studio, KoboldCpp)
+- Continuous Mode for benchmarks (Fast → Standard → Advanced)
+
+---
 
 ### v2.1.0 (2026-01-26)
 

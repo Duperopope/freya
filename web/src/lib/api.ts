@@ -675,3 +675,239 @@ export async function syncBMAD(): Promise<{ success: boolean; message: string }>
   const res = await fetch(`${API_BASE}/settings/sync-bmad`, { method: 'POST' })
   return handleResponse(res)
 }
+
+// -----------------------------------------------------------------------------
+// External Benchmarks (v2.5)
+// -----------------------------------------------------------------------------
+export interface ExternalBenchmark {
+  name: string
+  source: string
+  description: string
+  url: string
+  metrics: string[]
+  lastUpdated: string
+  integrated: boolean
+}
+
+export interface BenchmarkDataset {
+  name: string
+  format: string
+  size: number
+  samples: number
+  categories: string[]
+}
+
+export const EXTERNAL_BENCHMARKS: ExternalBenchmark[] = [
+  {
+    name: 'MMLU',
+    source: 'Hugging Face',
+    description: 'Massive Multitask Language Understanding - 57 subjects',
+    url: 'https://huggingface.co/datasets/cais/mmlu',
+    metrics: ['accuracy', 'per_subject_accuracy'],
+    lastUpdated: '2024-12',
+    integrated: true,
+  },
+  {
+    name: 'HellaSwag',
+    source: 'Hugging Face',
+    description: 'Commonsense reasoning benchmark',
+    url: 'https://huggingface.co/datasets/Rowan/hellaswag',
+    metrics: ['accuracy'],
+    lastUpdated: '2024-12',
+    integrated: true,
+  },
+  {
+    name: 'TruthfulQA',
+    source: 'Hugging Face',
+    description: 'Measuring model truthfulness and factuality',
+    url: 'https://huggingface.co/datasets/truthfulqa/truthful_qa',
+    metrics: ['mc1_accuracy', 'mc2_accuracy', 'bleu_diff'],
+    lastUpdated: '2024-12',
+    integrated: true,
+  },
+  {
+    name: 'GSM8K',
+    source: 'OpenAI',
+    description: 'Grade school math word problems',
+    url: 'https://huggingface.co/datasets/gsm8k',
+    metrics: ['accuracy', 'pass@1'],
+    lastUpdated: '2024-12',
+    integrated: true,
+  },
+  {
+    name: 'HumanEval',
+    source: 'OpenAI',
+    description: 'Code generation benchmark',
+    url: 'https://huggingface.co/datasets/openai_humaneval',
+    metrics: ['pass@1', 'pass@10', 'pass@100'],
+    lastUpdated: '2024-12',
+    integrated: true,
+  },
+  {
+    name: 'MBPP',
+    source: 'Google',
+    description: 'Mostly Basic Programming Problems',
+    url: 'https://huggingface.co/datasets/mbpp',
+    metrics: ['pass@1', 'pass@80'],
+    lastUpdated: '2024-12',
+    integrated: true,
+  },
+  {
+    name: 'ARC-Challenge',
+    source: 'AI2',
+    description: 'Advanced reasoning questions',
+    url: 'https://huggingface.co/datasets/allenai/ai2_arc',
+    metrics: ['accuracy'],
+    lastUpdated: '2024-12',
+    integrated: true,
+  },
+  {
+    name: 'WinoGrande',
+    source: 'AI2',
+    description: 'Commonsense reasoning with adversarial examples',
+    url: 'https://huggingface.co/datasets/allenai/winogrande',
+    metrics: ['accuracy'],
+    lastUpdated: '2024-12',
+    integrated: true,
+  },
+  {
+    name: 'MT-Bench',
+    source: 'LMSYS',
+    description: 'Multi-turn conversation benchmark',
+    url: 'https://huggingface.co/spaces/lmsys/mt-bench',
+    metrics: ['average_score', 'writing', 'roleplay', 'reasoning', 'math', 'coding', 'extraction', 'stem', 'humanities'],
+    lastUpdated: '2025-01',
+    integrated: true,
+  },
+  {
+    name: 'Chatbot Arena',
+    source: 'LMSYS',
+    description: 'Human preference benchmark via blind comparisons',
+    url: 'https://chat.lmsys.org/?leaderboard',
+    metrics: ['elo_rating', 'win_rate'],
+    lastUpdated: '2025-01',
+    integrated: false,
+  },
+]
+
+export async function getExternalBenchmarks(): Promise<ExternalBenchmark[]> {
+  // Return static list for now, could be fetched from backend
+  return EXTERNAL_BENCHMARKS
+}
+
+export async function importBenchmarkResults(
+  benchmark: string, 
+  data: Record<string, unknown>
+): Promise<{ success: boolean; imported_count: number }> {
+  const res = await fetch(`${API_BASE}/bench/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ benchmark, data }),
+  })
+  return handleResponse(res)
+}
+
+// -----------------------------------------------------------------------------
+// Best Agent Configuration (v2.5)
+// -----------------------------------------------------------------------------
+export interface BestAgentConfig {
+  enabled: boolean
+  autoSelect: boolean
+  minScore: number
+  preferredStyle: 'fast' | 'balanced' | 'quality'
+  roleOverrides: Record<string, string>
+}
+
+export async function getBestAgentConfig(): Promise<BestAgentConfig> {
+  // Read from localStorage for now
+  const saved = localStorage.getItem('freya_best_agent_config')
+  if (saved) {
+    return JSON.parse(saved)
+  }
+  return {
+    enabled: false,
+    autoSelect: true,
+    minScore: 75,
+    preferredStyle: 'balanced',
+    roleOverrides: {},
+  }
+}
+
+export async function updateBestAgentConfig(config: Partial<BestAgentConfig>): Promise<{ success: boolean }> {
+  const current = await getBestAgentConfig()
+  const updated = { ...current, ...config }
+  localStorage.setItem('freya_best_agent_config', JSON.stringify(updated))
+  return { success: true }
+}
+
+// -----------------------------------------------------------------------------
+// Agent Intelligence Profiles (v2.5)
+// -----------------------------------------------------------------------------
+export interface AgentProfile {
+  id: string
+  name: string
+  role: string
+  description: string
+  capabilities: string[]
+  systemPrompt: string
+  temperature: number
+  maxTokens: number
+  benchmarkScores?: Record<string, number>
+}
+
+export const AGENT_PROFILES: AgentProfile[] = [
+  {
+    id: 'analyst',
+    name: 'Business Analyst',
+    role: 'analyst',
+    description: 'Requirements analysis and stakeholder identification',
+    capabilities: ['requirements_gathering', 'stakeholder_analysis', 'scope_definition', 'risk_assessment'],
+    systemPrompt: 'You are an expert business analyst...',
+    temperature: 0.7,
+    maxTokens: 2048,
+  },
+  {
+    id: 'security',
+    name: 'Security Expert',
+    role: 'security',
+    description: 'Security analysis and vulnerability assessment',
+    capabilities: ['threat_modeling', 'vulnerability_assessment', 'security_architecture', 'compliance'],
+    systemPrompt: 'You are a cybersecurity expert...',
+    temperature: 0.5,
+    maxTokens: 2048,
+  },
+  {
+    id: 'devops',
+    name: 'DevOps Engineer',
+    role: 'devops',
+    description: 'CI/CD, infrastructure, and deployment',
+    capabilities: ['ci_cd', 'infrastructure_as_code', 'containerization', 'monitoring'],
+    systemPrompt: 'You are a DevOps engineer...',
+    temperature: 0.6,
+    maxTokens: 2048,
+  },
+  {
+    id: 'ux',
+    name: 'UX Designer',
+    role: 'ux',
+    description: 'User experience and interface design',
+    capabilities: ['user_research', 'wireframing', 'prototyping', 'usability_testing'],
+    systemPrompt: 'You are a UX designer...',
+    temperature: 0.8,
+    maxTokens: 2048,
+  },
+  {
+    id: 'data',
+    name: 'Data Scientist',
+    role: 'data',
+    description: 'Data analysis and ML evaluation',
+    capabilities: ['data_analysis', 'ml_modeling', 'statistical_analysis', 'visualization'],
+    systemPrompt: 'You are a data scientist...',
+    temperature: 0.6,
+    maxTokens: 2048,
+  },
+]
+
+export async function getAgentProfiles(): Promise<AgentProfile[]> {
+  return AGENT_PROFILES
+}
