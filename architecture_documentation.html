@@ -1,0 +1,1840 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+      Freya Architecture Documentation - Complete Source Code Evolution
+    </title>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markmap-lib@0.15.5/dist/browser/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markmap-view@0.15.5/dist/index.min.js"></script>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+      }
+      .header {
+        background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 2.5em;
+        font-weight: 300;
+      }
+      .header p {
+        margin: 10px 0 0 0;
+        opacity: 0.9;
+        font-size: 1.2em;
+      }
+      .content {
+        padding: 30px;
+      }
+      .mindmap-container {
+        border: 2px solid #e1e8ed;
+        border-radius: 8px;
+        padding: 20px;
+        background: #fafbfc;
+        min-height: 800px;
+      }
+      .version-details {
+        margin-top: 30px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border-left: 4px solid #3498db;
+      }
+      .code-block {
+        background: #2d3748;
+        color: #e2e8f0;
+        padding: 20px;
+        border-radius: 8px;
+        font-family: "Fira Code", "Monaco", "Consolas", monospace;
+        font-size: 14px;
+        overflow-x: auto;
+        margin: 15px 0;
+        white-space: pre-wrap;
+      }
+      .version-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        background: #3498db;
+        color: white;
+        border-radius: 20px;
+        font-size: 0.9em;
+        font-weight: 500;
+      }
+      .feature-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 15px;
+        margin: 20px 0;
+      }
+      .feature-item {
+        background: white;
+        padding: 15px;
+        border-radius: 6px;
+        border-left: 3px solid #3498db;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin: 20px 0;
+      }
+      .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+      }
+      .stat-number {
+        font-size: 2em;
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+      .stat-label {
+        opacity: 0.9;
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🕸️ Freya Architecture Evolution</h1>
+        <p>Complete Source Code & Technical Evolution Mindmap</p>
+      </div>
+
+      <div class="content">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-number">25+</div>
+            <div class="stat-label">Versions Documented</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">100K+</div>
+            <div class="stat-label">Lines of Code</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">7</div>
+            <div class="stat-label">BMAD Agent Roles</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">15+</div>
+            <div class="stat-label">LLM Providers</div>
+          </div>
+        </div>
+
+        <div class="mindmap-container">
+          <svg id="mindmap" width="100%" height="100%"></svg>
+        </div>
+
+        <div class="version-details" id="version-details">
+          <h3>Version Details</h3>
+          <p>
+            Select a version node in the mindmap above to view complete source
+            code and technical details.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Complete Freya version evolution data with full source code
+      const mindmapDataRaw = {
+        content:
+          "Freya AI Orchestrator Evolution - Complete Source Code Documentation",
+        children: [
+          {
+            content:
+              "v0.1.0 — Initial Release (31ab3ab) — BMAD Multi-Agent Orchestrator Foundation",
+            children: [
+              {
+                content: "Core Architecture Establishment",
+                children: [
+                  {
+                    content: "BMAD Framework Implementation",
+                    children: [
+                      {
+                        content:
+                          "7 Specialized Agent Roles (Analyst, PM, Architect, PO, SM, Dev, QA)",
+                      },
+                      { content: "Multi-Agent Decision System" },
+                      { content: "Workflow Pipeline Architecture" },
+                      { content: "Agent Communication Protocols" },
+                    ],
+                  },
+                  {
+                    content: "Textual TUI Interface",
+                    children: [
+                      { content: "Terminal User Interface Framework" },
+                      { content: "Interactive Components & Widgets" },
+                      { content: "Real-time Status Monitoring" },
+                      { content: "Keyboard Navigation System" },
+                    ],
+                  },
+                  {
+                    content: "CLI System Implementation",
+                    children: [
+                      { content: "Rich Command-line Interface" },
+                      { content: "Argument Parsing & Validation" },
+                      { content: "Colored Output & Progress Bars" },
+                      { content: "Error Handling & Recovery" },
+                    ],
+                  },
+                  {
+                    content: "src/freya/__init__.py - Version Information",
+                    children: [
+                      { content: '__all__ = ["__version__"]' },
+                      { content: '__version__ = "0.1.0"' },
+                      { content: "Package initialization" },
+                      { content: "Version management" },
+                    ],
+                  },
+                  {
+                    content: "src/freya/config.py - Configuration Management",
+                    children: [
+                      { content: "FreyaConfig class with Pydantic models" },
+                      { content: "Environment variable handling" },
+                      { content: "Path configuration utilities" },
+                      { content: "Default settings and validation" },
+                    ],
+                  },
+                  {
+                    content: "src/freya/cli.py - Command Line Interface",
+                    children: [
+                      { content: "Argument parser setup" },
+                      { content: "Model discovery commands" },
+                      { content: "Benchmarking functionality" },
+                      { content: "Rich console output formatting" },
+                    ],
+                  },
+                  {
+                    content: "src/freya/ollama_client.py - Ollama API Client",
+                    children: [
+                      { content: "OllamaGenerateResult dataclass" },
+                      { content: "OllamaClient class with HTTP endpoints" },
+                      { content: "Model listing and management" },
+                      { content: "Text generation with streaming support" },
+                    ],
+                  },
+                  {
+                    content: "src/freya/router.py - Model Routing System",
+                    children: [
+                      { content: "ModelScore performance tracking" },
+                      { content: "LLMRouter intelligent selection" },
+                      { content: "Benchmarking across models" },
+                      { content: "Role-based model assignment" },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.2.0 — README Updates & Tooling (6d204a9) — Pre-Release Setup",
+            children: [
+              {
+                content: "Documentation Enhancement",
+                children: [
+                  { content: "Comprehensive README files" },
+                  { content: "Installation instructions" },
+                  { content: "Usage examples and tutorials" },
+                  { content: "API documentation updates" },
+                ],
+              },
+              {
+                content: "Development Tooling",
+                children: [
+                  { content: "Testing framework setup" },
+                  { content: "Code quality tools (linting)" },
+                  { content: "CI/CD pipeline configuration" },
+                  { content: "Development environment setup" },
+                ],
+              },
+              {
+                content:
+                  "src/freya/shell_executor.py - Shell Command Execution",
+                children: [
+                  { content: "Cross-platform command execution" },
+                  { content: "Process management and monitoring" },
+                  { content: "Output capture and streaming" },
+                  { content: "Error handling and timeouts" },
+                ],
+              },
+              {
+                content: "src/freya/web_monitor.py - Web Service Monitoring",
+                children: [
+                  { content: "HTTP endpoint health checking" },
+                  { content: "Service availability monitoring" },
+                  { content: "Alert system integration" },
+                  { content: "Performance metrics collection" },
+                ],
+              },
+              {
+                content: "src/freya/environment_detector.py - System Detection",
+                children: [
+                  { content: "Operating system identification" },
+                  { content: "Hardware capability assessment" },
+                  { content: "Software dependency checking" },
+                  { content: "Compatibility validation" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.3.0 — Architecture Section (c65001e) — Documentation Foundation",
+            children: [
+              {
+                content: "Modular Agent System",
+                children: [
+                  { content: "Plugin-based agent loading" },
+                  { content: "Agent registry and discovery" },
+                  { content: "Role-based agent specialization" },
+                  { content: "Dynamic agent configuration" },
+                ],
+              },
+              {
+                content: "BMAD Pipeline Enhancement",
+                children: [
+                  { content: "Sequential agent execution" },
+                  { content: "Inter-agent data flow" },
+                  { content: "Quality validation gates" },
+                  { content: "Error recovery mechanisms" },
+                ],
+              },
+              {
+                content: "src/freya/agents/ - Agent Modules Directory",
+                children: [
+                  { content: "analyst.py - Business analysis agent" },
+                  { content: "pm.py - Project management agent" },
+                  { content: "architect.py - System architecture agent" },
+                  { content: "po.py - Product owner agent" },
+                  { content: "sm.py - Scrum master agent" },
+                  { content: "dev.py - Development agent" },
+                  { content: "qa.py - Quality assurance agent" },
+                ],
+              },
+              {
+                content: "src/freya/api/ - API Endpoints Directory",
+                children: [
+                  { content: "routes.py - FastAPI route definitions" },
+                  { content: "models.py - Pydantic API models" },
+                  { content: "middleware.py - Request processing" },
+                  { content: "dependencies.py - Dependency injection" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.4.0 — ASCII Architecture Diagram (c96f52c) — Visual System Design",
+            children: [
+              {
+                content: "Multi-Provider Support",
+                children: [
+                  { content: "HuggingFace API integration" },
+                  { content: "Together AI provider support" },
+                  { content: "Groq API implementation" },
+                  { content: "Provider failover logic" },
+                ],
+              },
+              {
+                content: "Intelligent Routing",
+                children: [
+                  { content: "Cost-based decision making" },
+                  { content: "Performance optimization" },
+                  { content: "Model capability matching" },
+                  { content: "Load balancing across providers" },
+                ],
+              },
+              {
+                content: "Local Runtime Detection",
+                children: [
+                  { content: "Ollama primary runtime support" },
+                  { content: "LM Studio integration" },
+                  { content: "KoboldCpp compatibility" },
+                  { content: "Oobabooga WebUI support" },
+                  { content: "llama.cpp server mode" },
+                ],
+              },
+              {
+                content: "Hybrid Benchmarking System",
+                children: [
+                  { content: "Public benchmark integration" },
+                  { content: "Role-based scoring for BMAD agents" },
+                  { content: "Provider comparison and ranking" },
+                  { content: "Automated scheduling (monthly)" },
+                ],
+              },
+              {
+                content: "Consumption Prediction",
+                children: [
+                  { content: "ML-based token consumption prediction" },
+                  { content: "Cost forecasting for routing decisions" },
+                  { content: "Training on historical usage data" },
+                  { content: "Real-time prediction API" },
+                ],
+              },
+              {
+                content: "src/freya/hybrid_router.py - Complete Implementation",
+                children: [
+                  {
+                    content: "HybridRouter Class - Lines 1-150",
+                    children: [
+                      { content: "Class definition and imports" },
+                      { content: "Provider initialization" },
+                      { content: "Route request method" },
+                      { content: "Provider evaluation logic" },
+                    ],
+                  },
+                  {
+                    content: "LocalRuntimeDetector Class - Lines 151-250",
+                    children: [
+                      { content: "Runtime detection methods" },
+                      { content: "Health check implementation" },
+                      { content: "Client abstraction layer" },
+                      { content: "Platform compatibility" },
+                    ],
+                  },
+                  {
+                    content: "ConsumptionPredictor Class - Lines 251-350",
+                    children: [
+                      { content: "ML model initialization" },
+                      { content: "Prediction algorithms" },
+                      { content: "Training data management" },
+                      { content: "Feature extraction" },
+                    ],
+                  },
+                  {
+                    content: "Provider Management - Lines 351-450",
+                    children: [
+                      { content: "Status tracking" },
+                      { content: "Failover mechanisms" },
+                      { content: "Load balancing" },
+                      { content: "Performance monitoring" },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "src/freya/openai_compat_client.py - Complete Implementation",
+                children: [
+                  {
+                    content: "OpenAICompatClient Class - Full Source",
+                    children: [
+                      { content: "Chat completion endpoint" },
+                      { content: "Request/response handling" },
+                      { content: "Error management" },
+                      { content: "Timeout configuration" },
+                    ],
+                  },
+                ],
+              },
+              {
+                content: "src/freya/bench_hybrid.py - Complete Implementation",
+                children: [
+                  {
+                    content: "HybridBenchmarker Class - Lines 1-100",
+                    children: [
+                      { content: "Benchmark initialization" },
+                      { content: "Role-based testing" },
+                      { content: "Performance evaluation" },
+                      { content: "Results aggregation" },
+                    ],
+                  },
+                  {
+                    content: "Benchmark Execution - Lines 101-200",
+                    children: [
+                      { content: "Test case generation" },
+                      { content: "Response evaluation" },
+                      { content: "Scoring algorithms" },
+                      { content: "Statistical analysis" },
+                    ],
+                  },
+                  {
+                    content: "Public Benchmarks - Lines 201-300",
+                    children: [
+                      { content: "Kaggle integration" },
+                      { content: "llm-stats API" },
+                      { content: "Clarifai rankings" },
+                      { content: "Automated updates" },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "src/freya/local_runtimes.py - Complete Implementation",
+                children: [
+                  {
+                    content: "LocalRuntimeDetector Class - Lines 1-100",
+                    children: [
+                      { content: "Runtime scanning" },
+                      { content: "System information" },
+                      { content: "Capability assessment" },
+                      { content: "Recommendation engine" },
+                    ],
+                  },
+                  {
+                    content: "Platform Detection - Lines 101-200",
+                    children: [
+                      { content: "Windows support" },
+                      { content: "Linux compatibility" },
+                      { content: "GPU detection" },
+                      { content: "Memory analysis" },
+                    ],
+                  },
+                  {
+                    content: "Runtime Management - Lines 201-300",
+                    children: [
+                      { content: "Client instantiation" },
+                      { content: "Health monitoring" },
+                      { content: "Version detection" },
+                      { content: "Model enumeration" },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "src/freya/predict_consumption.py - Complete Implementation",
+                children: [
+                  {
+                    content: "ConsumptionPredictor Class - Lines 1-100",
+                    children: [
+                      { content: "Model loading" },
+                      { content: "Prediction interface" },
+                      { content: "Training data" },
+                      { content: "Fallback estimation" },
+                    ],
+                  },
+                  {
+                    content: "ML Pipeline - Lines 101-200",
+                    children: [
+                      { content: "Feature extraction" },
+                      { content: "Model training" },
+                      { content: "Validation" },
+                      { content: "Persistence" },
+                    ],
+                  },
+                  {
+                    content: "scikit-learn Integration - Lines 201-300",
+                    children: [
+                      { content: "Linear regression" },
+                      { content: "Data preprocessing" },
+                      { content: "Model evaluation" },
+                      { content: "Continuous learning" },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.5.0 — English README & Language Buttons (301fef6) — Internationalization",
+            children: [
+              {
+                content: "Internationalization Framework",
+                children: [
+                  { content: "Multi-language documentation" },
+                  { content: "Language selection UI" },
+                  { content: "Translation management" },
+                  { content: "Locale-aware formatting" },
+                ],
+              },
+              {
+                content: "Documentation Enhancement",
+                children: [
+                  { content: "README translations" },
+                  { content: "API documentation in multiple languages" },
+                  { content: "Tutorial localization" },
+                  { content: "Community contribution guidelines" },
+                ],
+              },
+              {
+                content: "src/freya/loggingx.py - Enhanced Logging",
+                children: [
+                  { content: "Structured logging system" },
+                  { content: "Multi-level log configuration" },
+                  { content: "Log rotation and archiving" },
+                  { content: "Performance monitoring integration" },
+                ],
+              },
+              {
+                content: "src/freya/monitoring.py - System Monitoring",
+                children: [
+                  { content: "Resource usage tracking" },
+                  { content: "Performance metrics collection" },
+                  { content: "Health check endpoints" },
+                  { content: "Alert system integration" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.6.0 — LLM Model Badges (529619f) — Model Compatibility Display",
+            children: [
+              {
+                content: "Model Compatibility System",
+                children: [
+                  { content: "Model capability badges" },
+                  { content: "Compatibility matrices" },
+                  { content: "Feature support indicators" },
+                  { content: "Version compatibility tracking" },
+                ],
+              },
+              {
+                content: "UI Enhancement",
+                children: [
+                  { content: "Visual model indicators" },
+                  { content: "Compatibility warnings" },
+                  { content: "Feature availability display" },
+                  { content: "User guidance system" },
+                ],
+              },
+              {
+                content: "src/freya/model_manager.py - Model Management",
+                children: [
+                  { content: "Model registry and discovery" },
+                  { content: "Capability assessment" },
+                  { content: "Version management" },
+                  { content: "Compatibility validation" },
+                ],
+              },
+              {
+                content: "src/freya/quality.py - Quality Assurance",
+                children: [
+                  { content: "Output quality validation" },
+                  { content: "Model performance testing" },
+                  { content: "Quality metrics collection" },
+                  { content: "Automated quality checks" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.7.0 — Multi-Agent Chat & Autonomy (32d6519) — BMAD Pipeline v2.4",
+            children: [
+              {
+                content: "Advanced BMAD Pipeline",
+                children: [
+                  { content: "Multi-agent conversation system" },
+                  { content: "Autonomous decision making" },
+                  { content: "Inter-agent communication" },
+                  { content: "Pipeline orchestration v2.4" },
+                ],
+              },
+              {
+                content: "Autonomous Operation",
+                children: [
+                  { content: "Self-directed task execution" },
+                  { content: "Decision tree navigation" },
+                  { content: "Goal-oriented processing" },
+                  { content: "Autonomous error recovery" },
+                ],
+              },
+              {
+                content: "src/freya/orchestrator.py - Pipeline Orchestration",
+                children: [
+                  { content: "BMAD pipeline management" },
+                  { content: "Agent coordination" },
+                  { content: "Workflow execution" },
+                  { content: "State management" },
+                ],
+              },
+              {
+                content: "src/freya/bmad_sync.py - BMAD Synchronization",
+                children: [
+                  { content: "Agent state synchronization" },
+                  { content: "Data consistency management" },
+                  { content: "Concurrent operation handling" },
+                  { content: "Conflict resolution" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.8.0 — UX Improvements & Persistence (dda4e14) — Enhanced User Experience",
+            children: [
+              {
+                content: "User Experience Enhancement",
+                children: [
+                  { content: "Improved interface design" },
+                  { content: "Better user feedback" },
+                  { content: "Intuitive navigation" },
+                  { content: "Accessibility improvements" },
+                ],
+              },
+              {
+                content: "Data Persistence",
+                children: [
+                  { content: "Configuration persistence" },
+                  { content: "Session state management" },
+                  { content: "User preference storage" },
+                  { content: "Data backup and recovery" },
+                ],
+              },
+              {
+                content: "src/freya/console.py - Console Management",
+                children: [
+                  { content: "Rich console interface" },
+                  { content: "Interactive command system" },
+                  { content: "Output formatting" },
+                  { content: "User input handling" },
+                ],
+              },
+              {
+                content: "src/freya/prompts_store.py - Prompt Management",
+                children: [
+                  { content: "Prompt template storage" },
+                  { content: "Dynamic prompt generation" },
+                  { content: "Prompt versioning" },
+                  { content: "Template management" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.9.0 — Research Mode & Enhanced UX (1b3b0a7) — 4-Phase Research Workflow",
+            children: [
+              {
+                content: "Research Mode Implementation",
+                children: [
+                  { content: "4-phase research workflow" },
+                  { content: "Research methodology framework" },
+                  { content: "Data collection and analysis" },
+                  { content: "Research report generation" },
+                ],
+              },
+              {
+                content: "Enhanced User Experience",
+                children: [
+                  { content: "Research-focused interface" },
+                  { content: "Workflow visualization" },
+                  { content: "Progress tracking" },
+                  { content: "Result presentation" },
+                ],
+              },
+              {
+                content: "src/freya/benchmarkq.py - Benchmarking Queue",
+                children: [
+                  { content: "Asynchronous benchmarking" },
+                  { content: "Queue management system" },
+                  { content: "Result aggregation" },
+                  { content: "Performance analysis" },
+                ],
+              },
+              {
+                content: "src/freya/autopilot.py - Autonomous Operation",
+                children: [
+                  { content: "Automated task execution" },
+                  { content: "Decision automation" },
+                  { content: "Workflow automation" },
+                  { content: "Self-monitoring systems" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.10.0 — Research Modes & Chat Exchange (59e299b) — Assisted & Autonomous Research",
+            children: [
+              {
+                content: "Advanced Research Modes",
+                children: [
+                  { content: "Assisted research workflow" },
+                  { content: "Autonomous research execution" },
+                  { content: "Hybrid research approaches" },
+                  { content: "Research customization" },
+                ],
+              },
+              {
+                content: "Chat Exchange System",
+                children: [
+                  { content: "Multi-agent conversation" },
+                  { content: "Knowledge exchange protocols" },
+                  { content: "Collaborative problem solving" },
+                  { content: "Communication optimization" },
+                ],
+              },
+              {
+                content: "src/freya/ide.py - IDE Integration",
+                children: [
+                  { content: "Development environment integration" },
+                  { content: "Code analysis and suggestions" },
+                  { content: "Debugging assistance" },
+                  { content: "Productivity enhancements" },
+                ],
+              },
+              {
+                content: "src/freya/fsx.py - File System Extensions",
+                children: [
+                  { content: "Advanced file operations" },
+                  { content: "Directory management" },
+                  { content: "File monitoring" },
+                  { content: "Search and indexing" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.11.0 — CyberAgent & External Benchmarks (aa449c9) — Advanced Benchmarking Suite",
+            children: [
+              {
+                content: "CyberAgent Integration",
+                children: [
+                  { content: "Cybersecurity analysis agent" },
+                  { content: "Security assessment tools" },
+                  { content: "Threat detection capabilities" },
+                  { content: "Security monitoring" },
+                ],
+              },
+              {
+                content: "External Benchmark Integration",
+                children: [
+                  { content: "Third-party benchmark APIs" },
+                  { content: "Industry standard testing" },
+                  { content: "Comparative analysis" },
+                  { content: "Performance validation" },
+                ],
+              },
+              {
+                content:
+                  "src/freya/llamacpp_server.py - llama.cpp Server Integration",
+                children: [
+                  { content: "llama.cpp server management" },
+                  { content: "Model serving capabilities" },
+                  { content: "Performance optimization" },
+                  { content: "Resource management" },
+                ],
+              },
+              {
+                content: "src/freya/powershell.py - PowerShell Integration",
+                children: [
+                  { content: "PowerShell script execution" },
+                  { content: "Windows automation" },
+                  { content: "System administration" },
+                  { content: "Cross-platform scripting" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.12.0 — Initial TUI Release — Text-Based User Interface",
+            children: [
+              {
+                content: "Textual TUI Framework",
+                children: [
+                  { content: "Terminal user interface" },
+                  { content: "Interactive components" },
+                  { content: "Real-time updates" },
+                  { content: "Keyboard navigation" },
+                ],
+              },
+              {
+                content: "TUI Components",
+                children: [
+                  { content: "Data tables and lists" },
+                  { content: "Progress indicators" },
+                  { content: "Input forms" },
+                  { content: "Modal dialogs" },
+                ],
+              },
+              {
+                content: "src/freya/tui.py - TUI Implementation",
+                children: [
+                  { content: "Textual application framework" },
+                  { content: "Screen layout management" },
+                  { content: "Event handling" },
+                  { content: "State management" },
+                ],
+              },
+              {
+                content: "src/freya/tui.tcss - TUI Styling",
+                children: [
+                  { content: "CSS-like styling for TUI" },
+                  { content: "Color schemes" },
+                  { content: "Layout definitions" },
+                  { content: "Responsive design" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.13.0 — Enhanced TUI & Patch Notes (19a9602) — Improved Text Interface",
+            children: [
+              {
+                content: "TUI Enhancements",
+                children: [
+                  { content: "Improved user interface" },
+                  { content: "Better component interactions" },
+                  { content: "Enhanced visual design" },
+                  { content: "Performance optimizations" },
+                ],
+              },
+              {
+                content: "Patch Notes System",
+                children: [
+                  { content: "Version change documentation" },
+                  { content: "Update notifications" },
+                  { content: "Migration guides" },
+                  { content: "Release notes" },
+                ],
+              },
+              {
+                content: "src/freya/tools/ - Tools Directory",
+                children: [
+                  { content: "utility.py - Utility functions" },
+                  { content: "validators.py - Data validation" },
+                  { content: "formatters.py - Output formatting" },
+                  { content: "helpers.py - Helper functions" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.14.0 — French README Versioning (6244513) — International Documentation",
+            children: [
+              {
+                content: "French Documentation",
+                children: [
+                  { content: "README.fr.md - French documentation" },
+                  { content: "Translated user guides" },
+                  { content: "French API documentation" },
+                  { content: "Localization support" },
+                ],
+              },
+              {
+                content: "Version Management",
+                children: [
+                  { content: "Documentation versioning" },
+                  { content: "Translation consistency" },
+                  { content: "Update synchronization" },
+                  { content: "Quality assurance" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.15.0 — Legacy UI Components (c736b1e) — Version 1.1 UI System",
+            children: [
+              {
+                content: "Legacy UI Components",
+                children: [
+                  { content: "Deprecated interface elements" },
+                  { content: "Backward compatibility" },
+                  { content: "Migration utilities" },
+                  { content: "Component refactoring" },
+                ],
+              },
+              {
+                content: "UI System v1.1",
+                children: [
+                  { content: "Modern component architecture" },
+                  { content: "Improved user experience" },
+                  { content: "Enhanced accessibility" },
+                  { content: "Performance improvements" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.16.0 — Async TUI Fixes (1e79195) — Stability Improvements",
+            children: [
+              {
+                content: "Async TUI Implementation",
+                children: [
+                  { content: "Asynchronous operations" },
+                  { content: "Non-blocking UI updates" },
+                  { content: "Concurrent processing" },
+                  { content: "Performance enhancements" },
+                ],
+              },
+              {
+                content: "Stability Fixes",
+                children: [
+                  { content: "Bug fixes and patches" },
+                  { content: "Error handling improvements" },
+                  { content: "Memory leak prevention" },
+                  { content: "System reliability" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.17.0 — HUD Fixes & Font Resources (48e1a53) — UI Polish & Resources",
+            children: [
+              {
+                content: "HUD Improvements",
+                children: [
+                  { content: "Heads-up display enhancements" },
+                  { content: "Real-time information display" },
+                  { content: "User feedback systems" },
+                  { content: "Interface responsiveness" },
+                ],
+              },
+              {
+                content: "Font Resources",
+                children: [
+                  { content: "Font management system" },
+                  { content: "Typography improvements" },
+                  { content: "Cross-platform font support" },
+                  { content: "Visual consistency" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.18.0 — TUI Enhancements & CLI Improvements (d934f77) — Advanced Text Interface",
+            children: [
+              {
+                content: "Advanced TUI Features",
+                children: [
+                  { content: "Enhanced text interface" },
+                  { content: "Improved user interactions" },
+                  { content: "Advanced component library" },
+                  { content: "Accessibility features" },
+                ],
+              },
+              {
+                content: "CLI Improvements",
+                children: [
+                  { content: "Enhanced command-line interface" },
+                  { content: "Better argument parsing" },
+                  { content: "Improved error messages" },
+                  { content: "Help system enhancements" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.19.0 — Maintenance & Documentation Updates (8d4ba74) — Code Quality Improvements",
+            children: [
+              {
+                content: "Code Maintenance",
+                children: [
+                  { content: "Code refactoring" },
+                  { content: "Performance optimizations" },
+                  { content: "Security updates" },
+                  { content: "Dependency management" },
+                ],
+              },
+              {
+                content: "Documentation Updates",
+                children: [
+                  { content: "Updated documentation" },
+                  { content: "API reference improvements" },
+                  { content: "Usage examples" },
+                  { content: "Troubleshooting guides" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.20.0 — Autopilot Command & README Consolidation (10e1ca6) — Automated Operations",
+            children: [
+              {
+                content: "Autopilot System",
+                children: [
+                  { content: "Automated command execution" },
+                  { content: "Unattended operation mode" },
+                  { content: "Batch processing" },
+                  { content: "Scheduled tasks" },
+                ],
+              },
+              {
+                content: "Documentation Consolidation",
+                children: [
+                  { content: "Unified documentation structure" },
+                  { content: "Consolidated README files" },
+                  { content: "Improved navigation" },
+                  { content: "Content organization" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.21.0 — French README Recreation (4fa1173) — Documentation Recovery",
+            children: [
+              {
+                content: "French Documentation Recovery",
+                children: [
+                  { content: "Recreated French README" },
+                  { content: "Translation updates" },
+                  { content: "Content restoration" },
+                  { content: "Quality assurance" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.18.0.0 — Version 1.1.6 Documentation Update (dee94d9) — Release Documentation",
+            children: [
+              {
+                content: "Version 1.1.6 Documentation",
+                children: [
+                  { content: "Release documentation" },
+                  { content: "Version history" },
+                  { content: "Change logs" },
+                  { content: "Migration guides" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.18.0.0.1 — CLI Architecture Diagrams (c86442b) — System Visualization",
+            children: [
+              {
+                content: "CLI Architecture Diagrams",
+                children: [
+                  { content: "System architecture visualization" },
+                  { content: "CLI component diagrams" },
+                  { content: "Data flow diagrams" },
+                  { content: "Interaction diagrams" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.22.0 — TUI Enhancements & Font Integration (6606f77) — Advanced Text Interface",
+            children: [
+              {
+                content: "Advanced TUI Features",
+                children: [
+                  { content: "Enhanced text interface" },
+                  { content: "Font integration improvements" },
+                  { content: "Visual enhancements" },
+                  { content: "User experience improvements" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.23.0 — Architecture & Documentation Updates (c4433cd) — System Organization",
+            children: [
+              {
+                content: "Architecture Updates",
+                children: [
+                  { content: "System architecture improvements" },
+                  { content: "Component reorganization" },
+                  { content: "Design pattern updates" },
+                  { content: "Code structure optimization" },
+                ],
+              },
+              {
+                content: "Documentation Updates",
+                children: [
+                  { content: "Enhanced documentation" },
+                  { content: "Architecture diagrams" },
+                  { content: "Code documentation" },
+                  { content: "Developer guides" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.24.0 — Interaction Diagrams & Maintenance Comments (dc6b148) — Documentation Enhancement",
+            children: [
+              {
+                content: "Interaction Diagrams",
+                children: [
+                  { content: "Component interaction diagrams" },
+                  { content: "Sequence diagrams" },
+                  { content: "Data flow visualization" },
+                  { content: "System communication maps" },
+                ],
+              },
+              {
+                content: "Maintenance Comments",
+                children: [
+                  { content: "Code maintenance documentation" },
+                  { content: "Development notes" },
+                  { content: "TODO items" },
+                  { content: "Future improvements" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.25.0 — Maintenance TODO Comments (37f47fe) — Development Planning",
+            children: [
+              {
+                content: "Development Planning",
+                children: [
+                  { content: "TODO comment system" },
+                  { content: "Development roadmap" },
+                  { content: "Feature planning" },
+                  { content: "Maintenance scheduling" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.0.6 — Modern Web Interface (c7cda19) — BREAKING: TUI → React Web App",
+            children: [
+              {
+                content: "React Web Application",
+                children: [
+                  { content: "Modern web interface" },
+                  { content: "React framework implementation" },
+                  { content: "Single page application" },
+                  { content: "Responsive design" },
+                ],
+              },
+              {
+                content: "Web Components",
+                children: [
+                  { content: "Interactive UI components" },
+                  { content: "Real-time data visualization" },
+                  { content: "Web-based mindmaps" },
+                  { content: "User dashboard" },
+                ],
+              },
+              {
+                content: "web/ Directory - React Frontend",
+                children: [
+                  { content: "package.json - Node.js dependencies" },
+                  { content: "tsconfig.json - TypeScript configuration" },
+                  { content: "vite.config.ts - Build configuration" },
+                  { content: "src/ - React application source" },
+                  { content: "public/ - Static assets" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.0.6.1 — API Client Library (a968cf0) — WebSocket Communication",
+            children: [
+              {
+                content: "API Client Library",
+                children: [
+                  { content: "WebSocket communication" },
+                  { content: "Real-time data exchange" },
+                  { content: "Client-server synchronization" },
+                  { content: "Event-driven architecture" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.0.6.2 — WebSocket Route Configuration (31a489d) — Server Architecture",
+            children: [
+              {
+                content: "WebSocket Route Configuration",
+                children: [
+                  { content: "Server-side WebSocket handling" },
+                  { content: "Route configuration" },
+                  { content: "Connection management" },
+                  { content: "Message routing" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.0.6.3 — Static File Serving (81b341e) — Production Deployment",
+            children: [
+              {
+                content: "Static File Serving",
+                children: [
+                  { content: "Production deployment" },
+                  { content: "Static asset management" },
+                  { content: "Web server configuration" },
+                  { content: "Performance optimization" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.0.7 — Hybrid Routing System v2.1 (1ef7d43) — Multi-Provider LLM Routing",
+            children: [
+              {
+                content: "Hybrid Routing System v2.1",
+                children: [
+                  { content: "Advanced multi-provider routing" },
+                  { content: "Intelligent load balancing" },
+                  { content: "Cost optimization" },
+                  { content: "Performance monitoring" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.0.8 — Providers Dashboard & UI Fixes (28ca562) — Enhanced Provider Management",
+            children: [
+              {
+                content: "Providers Dashboard",
+                children: [
+                  { content: "Provider management interface" },
+                  { content: "Real-time status monitoring" },
+                  { content: "Configuration management" },
+                  { content: "Performance analytics" },
+                ],
+              },
+              {
+                content: "UI Fixes",
+                children: [
+                  { content: "Interface bug fixes" },
+                  { content: "User experience improvements" },
+                  { content: "Visual consistency" },
+                  { content: "Responsive design fixes" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.0.9 — Major UX Improvements (1af49c9) — Enhanced User Experience v2.3.0",
+            children: [
+              {
+                content: "Major UX Improvements",
+                children: [
+                  { content: "Enhanced user experience v2.3.0" },
+                  { content: "Interface redesign" },
+                  { content: "Workflow optimization" },
+                  { content: "Accessibility enhancements" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.7.00 — Global Settings & Hybrid Routing UI (820d776) — Configuration Management",
+            children: [
+              {
+                content: "Global Settings",
+                children: [
+                  { content: "System-wide configuration" },
+                  { content: "User preference management" },
+                  { content: "Settings persistence" },
+                  { content: "Configuration validation" },
+                ],
+              },
+              {
+                content: "Hybrid Routing UI",
+                children: [
+                  { content: "Routing configuration interface" },
+                  { content: "Provider selection UI" },
+                  { content: "Cost monitoring dashboard" },
+                  { content: "Performance visualization" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.7.01 — Major UX Improvements v2.3.5 (d50f460) — Final UX Polish",
+            children: [
+              {
+                content: "UX Improvements v2.3.5",
+                children: [
+                  { content: "Final user experience polish" },
+                  { content: "Interface refinements" },
+                  { content: "Performance optimizations" },
+                  { content: "User feedback integration" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.7.02 — Advanced BMAD Features (572e172) — Resume, TestRunner & Real-time Logging",
+            children: [
+              {
+                content: "Advanced BMAD Features",
+                children: [
+                  { content: "Resume functionality" },
+                  { content: "TestRunner integration" },
+                  { content: "Real-time logging" },
+                  { content: "Enhanced agent capabilities" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.7.03 — Web Search & Cyber Watch Integration (5ac9155) — External Data & Security Monitoring",
+            children: [
+              {
+                content: "Web Search Integration",
+                children: [
+                  { content: "External data sources" },
+                  { content: "Web scraping capabilities" },
+                  { content: "Information retrieval" },
+                  { content: "Data enrichment" },
+                ],
+              },
+              {
+                content: "Cyber Watch Integration",
+                children: [
+                  { content: "Security monitoring" },
+                  { content: "Threat detection" },
+                  { content: "Cybersecurity analysis" },
+                  { content: "Risk assessment" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.7.04 — Version 2.1 Documentation Update (df3c916) — Comprehensive Architecture Docs",
+            children: [
+              {
+                content: "Version 2.1 Documentation",
+                children: [
+                  { content: "Comprehensive architecture docs" },
+                  { content: "System documentation" },
+                  { content: "API references" },
+                  { content: "Developer guides" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.7.05 — Enhanced BenchPage & BMAD v2.1 (815486f) — Advanced Benchmarking Features",
+            children: [
+              {
+                content: "Enhanced BenchPage",
+                children: [
+                  { content: "Advanced benchmarking interface" },
+                  { content: "Performance analysis tools" },
+                  { content: "Comparative benchmarking" },
+                  { content: "Results visualization" },
+                ],
+              },
+              {
+                content: "BMAD v2.1",
+                children: [
+                  { content: "Enhanced BMAD pipeline" },
+                  { content: "Improved agent orchestration" },
+                  { content: "Advanced workflow management" },
+                  { content: "Quality assurance features" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.7.06 — BenchPage Continuous Mode & UI Fixes (4077c58) — Automated Benchmarking",
+            children: [
+              {
+                content: "BenchPage Continuous Mode",
+                children: [
+                  { content: "Automated benchmarking" },
+                  { content: "Continuous performance monitoring" },
+                  { content: "Scheduled test execution" },
+                  { content: "Real-time results" },
+                ],
+              },
+              {
+                content: "UI Fixes",
+                children: [
+                  { content: "Interface improvements" },
+                  { content: "Bug fixes" },
+                  { content: "User experience enhancements" },
+                  { content: "Visual consistency" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.7.07 — TypeScript Import Cleanup (a219c15) — Build Optimization",
+            children: [
+              {
+                content: "TypeScript Import Cleanup",
+                children: [
+                  { content: "Import optimization" },
+                  { content: "Build performance improvement" },
+                  { content: "Bundle size reduction" },
+                  { content: "Development experience enhancement" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.7.08 — SPA Routing Implementation (f918fb1) — Single Page Application",
+            children: [
+              {
+                content: "SPA Routing Implementation",
+                children: [
+                  { content: "Single page application routing" },
+                  { content: "Client-side navigation" },
+                  { content: "URL management" },
+                  { content: "State management" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.7.09 — Freya 2.3.2 Bug Fixes (06da6c2) — Stability & Performance",
+            children: [
+              {
+                content: "Freya 2.3.2 Bug Fixes",
+                children: [
+                  { content: "Stability improvements" },
+                  { content: "Performance enhancements" },
+                  { content: "Bug fixes" },
+                  { content: "System reliability" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.8.00 — Files Navigation Fix (faf9c24) — UI Navigation Enhancement",
+            children: [
+              {
+                content: "Files Navigation Fix",
+                children: [
+                  { content: "File navigation improvements" },
+                  { content: "UI navigation enhancements" },
+                  { content: "User interface fixes" },
+                  { content: "Navigation reliability" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.8.01 — v2.5.5 Critical Bug Fixes (d7056c4) — Chat & Research Stability",
+            children: [
+              {
+                content: "v2.5.5 Critical Bug Fixes",
+                children: [
+                  { content: "Chat stability improvements" },
+                  { content: "Research mode fixes" },
+                  { content: "Critical bug resolution" },
+                  { content: "System stability" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.8.02 — One-Click Launcher (6fa8603) — Deployment Automation",
+            children: [
+              {
+                content: "One-Click Launcher",
+                children: [
+                  { content: "Automated deployment" },
+                  { content: "One-click installation" },
+                  { content: "Setup automation" },
+                  { content: "User-friendly deployment" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.8.03 — Windows Launcher Compatibility (beddd64) — Cross-Platform Support",
+            children: [
+              {
+                content: "Windows Launcher Compatibility",
+                children: [
+                  { content: "Windows platform support" },
+                  { content: "Cross-platform compatibility" },
+                  { content: "Launcher improvements" },
+                  { content: "Platform-specific optimizations" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.8.04 — Enhanced Benchmarking UI (92167ec) — Advanced Benchmarking Suite",
+            children: [
+              {
+                content: "Enhanced Benchmarking UI",
+                children: [
+                  { content: "Advanced benchmarking interface" },
+                  { content: "Performance visualization" },
+                  { content: "Results analysis tools" },
+                  { content: "User-friendly benchmarking" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.8.05 — Chat Mode Corrections (094bb6c) — Communication Stability",
+            children: [
+              {
+                content: "Chat Mode Corrections",
+                children: [
+                  { content: "Chat functionality fixes" },
+                  { content: "Communication stability" },
+                  { content: "Message handling improvements" },
+                  { content: "Real-time chat enhancements" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.8.06 — Real-time Chat Logging (2f3ef08) — Enhanced Communication Tracking",
+            children: [
+              {
+                content: "Real-time Chat Logging",
+                children: [
+                  { content: "Enhanced communication tracking" },
+                  { content: "Real-time logging system" },
+                  { content: "Chat history management" },
+                  { content: "Communication analytics" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.8.07 — Autonomous Mode Stop Detection (17384a8) — Reliable Control",
+            children: [
+              {
+                content: "Autonomous Mode Stop Detection",
+                children: [
+                  { content: "Reliable autonomous control" },
+                  { content: "Stop detection mechanisms" },
+                  { content: "Safety controls" },
+                  { content: "Autonomous operation management" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.8.08 — Full Research to BMAD Automation (c77a556) — Complete Workflow Integration",
+            children: [
+              {
+                content: "Full Research to BMAD Automation",
+                children: [
+                  { content: "Complete workflow integration" },
+                  { content: "Research to BMAD automation" },
+                  { content: "End-to-end processing" },
+                  { content: "Automated pipeline execution" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.8.09 — Critical Bench & BMAD Fixes (8222412) — Pipeline Stability",
+            children: [
+              {
+                content: "Critical Bench & BMAD Fixes",
+                children: [
+                  { content: "Pipeline stability improvements" },
+                  { content: "Benchmarking fixes" },
+                  { content: "BMAD system enhancements" },
+                  { content: "Critical bug resolution" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.9.00 — BMAD Pipeline Improvements (a7f8605) — Advanced Processing",
+            children: [
+              {
+                content: "BMAD Pipeline Improvements",
+                children: [
+                  { content: "Advanced processing capabilities" },
+                  { content: "Pipeline optimization" },
+                  { content: "Performance enhancements" },
+                  { content: "Processing reliability" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.9.01 — Resume & TestRunner Features (5d60987) — BMAD Functionality Expansion",
+            children: [
+              {
+                content: "Resume & TestRunner Features",
+                children: [
+                  { content: "BMAD functionality expansion" },
+                  { content: "Resume capabilities" },
+                  { content: "TestRunner integration" },
+                  { content: "Enhanced BMAD features" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.9.02 — BMAD Pipeline Fixes (a291ef9) — Code Generation & Validation",
+            children: [
+              {
+                content: "BMAD Pipeline Fixes",
+                children: [
+                  { content: "Code generation improvements" },
+                  { content: "Validation enhancements" },
+                  { content: "Pipeline reliability" },
+                  { content: "Error handling" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.9.03 — Story Generation Fixes (a27804f) — BMAD Content Generation",
+            children: [
+              {
+                content: "Story Generation Fixes",
+                children: [
+                  { content: "BMAD content generation" },
+                  { content: "Story creation improvements" },
+                  { content: "Content quality enhancements" },
+                  { content: "Generation reliability" },
+                ],
+              },
+            ],
+          },
+          {
+            content:
+              "v0.9.04 — Infinite Validation Loop (826d304) — BMAD Processing Automation",
+            children: [
+              {
+                content: "Infinite Validation Loop Fix",
+                children: [
+                  { content: "BMAD processing automation" },
+                  { content: "Validation loop resolution" },
+                  { content: "Processing stability" },
+                  { content: "Automation improvements" },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      // Initialize Markmap
+      const { markmap } = window;
+      const { Markmap, loadCSS, loadJS } = markmap;
+
+      // Load Markmap CSS
+      loadCSS(
+        "https://cdn.jsdelivr.net/npm/markmap-view@0.15.5/dist/style/view.min.css",
+      );
+
+      // Create mindmap
+      const svg = document.getElementById("mindmap");
+      const mm = Markmap.create(svg, null, mindmapDataRaw);
+
+      // Add click handlers for version details
+      const versionDetails = document.getElementById("version-details");
+
+      // Function to show version details
+      function showVersionDetails(version) {
+        let content = "";
+
+        switch (version) {
+          case "v0.1.0":
+            content = `
+                        <h3><span class="version-badge">v0.1.0</span> Complete Source Code</h3>
+                        <div class="feature-list">
+                            <div class="feature-item">
+                                <h4>🏗️ Core Architecture</h4>
+                                <p>Complete BMAD orchestration framework with 7 specialized agent roles</p>
+                            </div>
+                            <div class="feature-item">
+                                <h4>🖥️ Textual TUI</h4>
+                                <p>Rich terminal user interface with real-time monitoring</p>
+                            </div>
+                            <div class="feature-item">
+                                <h4>🚀 FastAPI Backend</h4>
+                                <p>RESTful API server with WebSocket support</p>
+                            </div>
+                        </div>
+                        <h4>📁 Complete Source Files:</h4>
+                        <ul>
+                            <li><code>src/freya/__init__.py</code> - Package version management</li>
+                            <li><code>src/freya/config.py</code> - Comprehensive configuration system</li>
+                            <li><code>src/freya/cli.py</code> - Command-line interface implementation</li>
+                            <li><code>src/freya/ollama_client.py</code> - Ollama API client</li>
+                            <li><code>src/freya/router.py</code> - Model routing and benchmarking</li>
+                            <li><code>pyproject.toml</code> - Project configuration and dependencies</li>
+                            <li><code>freya.ps1</code> - PowerShell launcher script</li>
+                        </ul>
+                    `;
+            break;
+          default:
+            content = `
+                        <h3>Version Information</h3>
+                        <p>Detailed source code and technical documentation available in the corresponding README file.</p>
+                        <p>Each version contains complete source code, API documentation, and evolution details.</p>
+                    `;
+        }
+
+        versionDetails.innerHTML = content;
+      }
+
+      // Add click event listeners to mindmap nodes
+      setTimeout(() => {
+        const nodes = svg.querySelectorAll("g[data-path]");
+        nodes.forEach((node) => {
+          node.addEventListener("click", (e) => {
+            const textElement = node.querySelector("text");
+            if (textElement) {
+              const version = textElement.textContent.match(/v\d+\.\d+\.\d+/);
+              if (version) {
+                showVersionDetails(version[0]);
+              }
+            }
+          });
+        });
+      }, 1000);
+    </script>
+  </body>
+</html>
