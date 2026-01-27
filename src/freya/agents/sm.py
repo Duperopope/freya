@@ -43,12 +43,25 @@ Create 2 to 6 story documents. Output format:
             txt = self._gen(role="sm", prompt=prompt.strip(), system=system)
             stories = [s.strip() for s in txt.split("===STORY===") if s.strip()]
 
-            for s in stories:
-                m = re.search(r"^#\s*story:\s*([0-9]+\.[0-9]+)\s*(.+)$", s, flags=re.MULTILINE | re.IGNORECASE)
+            for idx, s in enumerate(stories):
+                # Try multiple patterns to match story header
+                m = re.search(r"^#\s*story[:\s]*([0-9]+(?:\.[0-9]+)?)\s*[:\-]?\s*(.*)$", s, flags=re.MULTILINE | re.IGNORECASE)
                 if not m:
-                    continue
-                sid = m.group(1)
-                title = m.group(2).strip()
+                    # Try alternative pattern: "# Story 1: Title" or "# 1.1 Title"
+                    m = re.search(r"^#\s*(?:story\s+)?([0-9]+(?:\.[0-9]+)?)[:\s]+(.*)$", s, flags=re.MULTILINE | re.IGNORECASE)
+                if not m:
+                    # Fallback: use epic number + index
+                    epic_num = re.search(r"epic-(\d+)", epic_file.name)
+                    epic_id = epic_num.group(1) if epic_num else "1"
+                    sid = f"{epic_id}.{idx + 1}"
+                    # Try to extract title from first heading
+                    title_match = re.search(r"^#\s+(.+)$", s, flags=re.MULTILINE)
+                    title = title_match.group(1).strip() if title_match else f"story-{idx + 1}"
+                else:
+                    sid = m.group(1)
+                    title = m.group(2).strip() if m.group(2) else f"story-{sid}"
+                
+                # Sanitize title for filename
                 safe_title = re.sub(r"[^a-z0-9\-_. ]+", "", title.lower()).strip().replace(" ", "-")
                 safe_title = re.sub(r"-+", "-", safe_title)[:60] or "story"
                 p = stories_dir / f"{sid}.{safe_title}.story.md"

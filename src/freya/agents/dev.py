@@ -41,7 +41,11 @@ If creating Python code, include tests in tests/ and keep pytest passing.
         stories_dir = ctx.artifacts_root / "stories"
         story_files = sorted(stories_dir.glob("*.story.md"))
         if not story_files:
-            raise FileNotFoundError("No story files found.")
+            # Check if stories directory exists and what's in it
+            if not stories_dir.exists():
+                raise FileNotFoundError(f"Stories directory not found: {stories_dir}. SM agent may have failed.")
+            existing = list(stories_dir.glob("*"))
+            raise FileNotFoundError(f"No story files found in {stories_dir}. Found: {[f.name for f in existing[:5]]}. SM agent may have generated invalid format.")
 
         out = ctx.artifacts_root / "dev-log.md"
         lines: list[str] = ["# dev-log", ""]

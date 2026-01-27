@@ -11,7 +11,7 @@
  * - Export results in multiple formats
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { 
   Play, 
   Square, 
@@ -460,11 +460,28 @@ export function BenchPage() {
     },
   })
 
-  // Apply routing mutation
+  // Apply routing mutation - send computed best models to backend
   const applyRoutingMutation = useMutation({
-    mutationFn: api.applyRouting,
-    onSuccess: () => {
+    mutationFn: () => {
+      // Build routing from bestByRole + overrides
+      const routing: Record<string, { model: string; options?: Record<string, unknown> }> = {}
+      
+      ROLES.forEach(role => {
+        const override = modelOverrides.find(o => o.role === role)
+        const best = bestByRole[role]
+        
+        if (override?.model) {
+          routing[role] = { model: override.model, options: {} }
+        } else if (best?.model) {
+          routing[role] = { model: best.model, options: best.options || {} }
+        }
+      })
+      
+      return api.applyRouting(routing)
+    },
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['routing'] })
+      console.log('[Bench] Routing applied:', data.roles_configured)
     },
   })
 
@@ -544,13 +561,43 @@ export function BenchPage() {
     return byModel
   }
 
-  // Get best model for each role from billboard (use effective data)
-  const bestByRole = effectiveBillboard.reduce((acc, entry) => {
-    if (!acc[entry.role] || entry.score > acc[entry.role].score) {
-      acc[entry.role] = entry
-    }
-    return acc
-  }, {} as Record<string, api.BillboardEntry>)
+  // Get best model for each role - combine billboard + all history programs
+  const bestByRole = useMemo(() => {
+    const result: Record<string, api.BillboardEntry> = {}
+    
+    // First, populate from billboard if available
+    effectiveBillboard.forEach(entry => {
+      if (!result[entry.role] || entry.score > result[entry.role].score) {
+        result[entry.role] = entry
+      }
+    })
+    
+    // Then, fill gaps from ALL history programs (not just selected)
+    const allHistories = [
+      ...(historyFast || []),
+      ...(historyStandard || []),
+      ...(historyAdvanced || []),
+      ...(benchHistoryCache['bench-fast'] as api.BenchResult[] || []),
+      ...(benchHistoryCache['bench-standard'] as api.BenchResult[] || []),
+      ...(benchHistoryCache['bench-advanced'] as api.BenchResult[] || []),
+    ]
+    
+    // Group by role and find best score per role
+    allHistories.forEach(h => {
+      const existing = result[h.role]
+      if (!existing || h.score > existing.score) {
+        result[h.role] = {
+          role: h.role,
+          model: h.model,
+          score: h.score,
+          latency_ms: h.latency_ms,
+          options: {}
+        }
+      }
+    })
+    
+    return result
+  }, [effectiveBillboard, historyFast, historyStandard, historyAdvanced, benchHistoryCache])
 
   // Get effective model for a role (override or best)
   const getEffectiveModel = (role: string): string | null => {

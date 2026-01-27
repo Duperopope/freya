@@ -176,8 +176,12 @@ export async function getBenchHistory(program = 'bench-fast', limit = 100): Prom
   return handleResponse(res)
 }
 
-export async function applyRouting(): Promise<{ success: boolean }> {
-  const res = await fetch(`${API_BASE}/bench/apply-routing`, { method: 'POST' })
+export async function applyRouting(routing?: Record<string, { model: string; options?: Record<string, unknown> }>): Promise<{ success: boolean; roles_configured?: string[] }> {
+  const res = await fetch(`${API_BASE}/bench/apply-routing`, { 
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ routing: routing || {} })
+  })
   return handleResponse(res)
 }
 

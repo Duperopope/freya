@@ -380,22 +380,52 @@ async def get_bench_state(request: Request, program: str = "bench-fast") -> Benc
         return BenchState(program=program, done_count=0, updated_at=None)
 
 
+class ApplyRoutingBody(BaseModel):
+    routing: dict[str, dict[str, Any]] = {}
+
 @router.post("/apply-routing")
-async def apply_routing(request: Request) -> dict[str, Any]:
-    """Apply best models from benchmark to routing.json."""
+async def apply_routing(request: Request, body: ApplyRoutingBody = ApplyRoutingBody()) -> dict[str, Any]:
+    """Apply best models from benchmark (or frontend override) to routing.json."""
     state = request.app.state.freya
     
-    if not state.router.scores:
-        raise HTTPException(status_code=400, detail="No benchmark scores available")
-    
     routing: dict[str, Any] = {}
-    for role, scores in state.router.scores.items():
-        if scores:
-            best = scores[0]
-            routing[role] = {
-                "model": best.model,
-                "options": dict(best.options) if best.options else {}
-            }
+    
+    # Priority 1: Use routing from frontend if provided
+    if body.routing:
+        for role, config in body.routing.items():
+            if config.get("model"):
+                routing[role] = {
+                    "model": config["model"],
+                    "options": config.get("options", {})
+                }
+    
+    # Priority 2: Fall back to router.scores if no frontend routing
+    if not routing and state.router.scores:
+        for role, scores in state.router.scores.items():
+            if scores:
+                best = scores[0]
+                routing[role] = {
+                    "model": best.model,
+                    "options": dict(best.options) if best.options else {}
+                }
+    
+    # Priority 3: Try to load from bench.json if still empty
+    if not routing:
+        bench_path = state.config.cache_root / "bench.json"
+        if bench_path.exists():
+            try:
+                data = json.loads(bench_path.read_text(encoding="utf-8"))
+                for role, arr in (data or {}).items():
+                    if arr and isinstance(arr, list) and arr[0]:
+                        routing[role] = {
+                            "model": arr[0].get("model", ""),
+                            "options": arr[0].get("options", {})
+                        }
+            except Exception:
+                pass
+    
+    if not routing:
+        raise HTTPException(status_code=400, detail="No benchmark scores available. Run a benchmark first or provide routing from UI.")
     
     routing_path = state.config.routing_path
     routing_path.parent.mkdir(parents=True, exist_ok=True)
