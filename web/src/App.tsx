@@ -14,7 +14,7 @@ import { useWebSocket } from './hooks/useWebSocket'
 
 function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const { setConnected, setSystemInfo } = useAppStore()
+  const { setConnected, setOllamaConnected, setSystemInfo } = useAppStore()
 
   // Initialize WebSocket connection
   useWebSocket()
@@ -26,6 +26,8 @@ function App() {
         const res = await fetch('/api/health')
         const data = await res.json()
         setConnected(data.ready && data.ollama?.connected)
+        // Update Ollama connection status with actual model count
+        setOllamaConnected(data.ollama?.connected ?? false, data.ollama?.models_count ?? 0)
         
         // Fetch system info
         const sysRes = await fetch('/api/system')

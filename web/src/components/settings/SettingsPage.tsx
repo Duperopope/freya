@@ -199,17 +199,92 @@ export function SettingsPage() {
     }
   }, [paths, editedPaths])
 
+  // Load saved theme/font preferences from localStorage
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('freya_theme') || 'dark'
+    const savedFont = localStorage.getItem('freya_font') || 'inter'
+    const savedFontSize = parseInt(localStorage.getItem('freya_font_size') || '14', 10)
+    setSelectedTheme(savedTheme)
+    setSelectedFont(savedFont)
+    setFontSize(savedFontSize)
+  }, [])
+  
+  // Apply theme in real-time with CSS variables
+  useEffect(() => {
+    const root = document.documentElement
+    
+    // Theme color configurations
+    const themeColors: Record<string, Record<string, string>> = {
+      dark: {
+        '--freya-bg-primary': '#0a0e14',
+        '--freya-bg-secondary': '#0f1419',
+        '--freya-bg-tertiary': '#151b23',
+        '--freya-bg-elevated': '#1a2230',
+        '--freya-text-primary': '#e6edf3',
+        '--freya-text-secondary': '#8b949e',
+        '--freya-text-muted': '#6b7280',
+      },
+      light: {
+        '--freya-bg-primary': '#ffffff',
+        '--freya-bg-secondary': '#f9fafb',
+        '--freya-bg-tertiary': '#f3f4f6',
+        '--freya-bg-elevated': '#e5e7eb',
+        '--freya-text-primary': '#111827',
+        '--freya-text-secondary': '#4b5563',
+        '--freya-text-muted': '#9ca3af',
+      },
+      midnight: {
+        '--freya-bg-primary': '#1e1b4b',
+        '--freya-bg-secondary': '#2e2a5e',
+        '--freya-bg-tertiary': '#3e3a6e',
+        '--freya-bg-elevated': '#4e4a7e',
+        '--freya-text-primary': '#e0e7ff',
+        '--freya-text-secondary': '#a5b4fc',
+        '--freya-text-muted': '#818cf8',
+      },
+      forest: {
+        '--freya-bg-primary': '#022c22',
+        '--freya-bg-secondary': '#064e3b',
+        '--freya-bg-tertiary': '#065f46',
+        '--freya-bg-elevated': '#047857',
+        '--freya-text-primary': '#d1fae5',
+        '--freya-text-secondary': '#6ee7b7',
+        '--freya-text-muted': '#34d399',
+      },
+      ocean: {
+        '--freya-bg-primary': '#0c4a6e',
+        '--freya-bg-secondary': '#075985',
+        '--freya-bg-tertiary': '#0369a1',
+        '--freya-bg-elevated': '#0284c7',
+        '--freya-text-primary': '#e0f2fe',
+        '--freya-text-secondary': '#7dd3fc',
+        '--freya-text-muted': '#38bdf8',
+      },
+    }
+    
+    const colors = themeColors[selectedTheme] || themeColors.dark
+    Object.entries(colors).forEach(([key, value]) => {
+      root.style.setProperty(key, value)
+    })
+    
+    // Also update Tailwind classes by setting data attribute
+    root.setAttribute('data-theme', selectedTheme)
+    localStorage.setItem('freya_theme', selectedTheme)
+  }, [selectedTheme])
+
   // Apply font in real-time
   useEffect(() => {
     const font = FONTS.find(f => f.id === selectedFont)
     if (font) {
       document.documentElement.style.fontFamily = font.family
+      localStorage.setItem('freya_font', selectedFont)
     }
   }, [selectedFont])
 
   // Apply font size in real-time
   useEffect(() => {
     document.documentElement.style.fontSize = `${fontSize}px`
+    localStorage.setItem('freya_font_size', fontSize.toString())
   }, [fontSize])
 
   // Copy to clipboard

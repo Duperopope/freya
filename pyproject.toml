@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "freya"
-version = "2.2.0"
-description = "Freya - BMAD-aligned multi-agent orchestrator for local LLMs via Ollama with Hybrid Routing and Modern Web UI"
+version = "2.3.0"
+description = "Freya - BMAD-aligned multi-agent orchestrator for local LLMs via Ollama with Hybrid Routing, Modern Web UI, and Enhanced UX"
 requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2.7.0",

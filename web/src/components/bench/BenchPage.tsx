@@ -1,5 +1,5 @@
 /**
- * BenchPage - LLM Benchmarking Dashboard v2.1
+ * BenchPage - LLM Benchmarking Dashboard v2.2
  * 
  * Modern, professional interface for running and analyzing LLM benchmarks.
  * Features:
@@ -41,7 +41,10 @@ import {
   Sliders,
   Info,
   Eye,
-  EyeOff
+  EyeOff,
+  Trash2,
+  RotateCcw,
+  Star
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
@@ -131,10 +134,20 @@ export function BenchPage() {
   const [expandedModel, setExpandedModel] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   
-  // Continuous mode state
-  const [continuousMode, setContinuousMode] = useState(false)
+  // Continuous mode state - Default ON as requested
+  const [continuousMode, setContinuousMode] = useState(true) // Default ON
   const [continuousPhase, setContinuousPhase] = useState<BenchProgram | 'fine-tuning' | null>(null)
-  const [autoAdvance, setAutoAdvance] = useState(true)
+  const [autoAdvance, setAutoAdvance] = useState(true) // Auto-switch intelligent ON by default
+  
+  // Configurable trials per category
+  const [trialsConfig, setTrialsConfig] = useState<Record<BenchProgram, number>>({
+    'bench-fast': 1,
+    'bench-standard': 5,
+    'bench-advanced': 5
+  })
+  
+  // Current best model (real-time)
+  const [currentBestModel, setCurrentBestModel] = useState<{ role: string; model: string; score: number } | null>(null)
   
   // Time estimation state
   const [phaseStartTime, setPhaseStartTime] = useState<Date | null>(null)
@@ -179,13 +192,16 @@ export function BenchPage() {
   // Update store when status changes
   useEffect(() => {
     if (status) {
+      // Cap progress at 100% to fix the 101% bug
+      const cappedProgress = Math.min(100, status.progress_percent)
+      
       setBenchProgress(status.running ? {
         running: status.running,
         program: status.program,
         phase: status.phase,
         role: status.role,
         model: status.model,
-        progress_percent: status.progress_percent,
+        progress_percent: cappedProgress,
       } : null)
       
       // Track phase start time for estimation
@@ -194,9 +210,9 @@ export function BenchPage() {
       }
       
       // Calculate time estimation
-      if (status.running && phaseStartTime && status.progress_percent > 0) {
+      if (status.running && phaseStartTime && cappedProgress > 0 && cappedProgress < 100) {
         const elapsed = (new Date().getTime() - phaseStartTime.getTime()) / 1000
-        const estimatedTotal = elapsed / (status.progress_percent / 100)
+        const estimatedTotal = elapsed / (cappedProgress / 100)
         const remaining = estimatedTotal - elapsed
         
         if (remaining > 0) {
@@ -206,6 +222,8 @@ export function BenchPage() {
         } else {
           setEstimatedTimeRemaining('Completing...')
         }
+      } else if (cappedProgress >= 100) {
+        setEstimatedTimeRemaining('Finalizing...')
       }
       
       // Handle continuous mode progression - trigger when bench completes
@@ -222,6 +240,20 @@ export function BenchPage() {
       }
     }
   }, [status, setBenchProgress, continuousMode, continuousPhase, autoAdvance, phaseStartTime])
+  
+  // Update current best model in real-time from billboard
+  useEffect(() => {
+    if (billboard && billboard.length > 0 && status?.running) {
+      // Find the best scoring model across all roles
+      const best = billboard.reduce((acc, entry) => {
+        if (!acc || entry.score > acc.score) {
+          return { role: entry.role, model: entry.model, score: entry.score }
+        }
+        return acc
+      }, null as { role: string; model: string; score: number } | null)
+      setCurrentBestModel(best)
+    }
+  }, [billboard, status?.running])
 
   // Start benchmark mutation
   const startMutation = useMutation({
@@ -599,7 +631,7 @@ export function BenchPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-freya-accent-blue">
-                    {Math.round(status.progress_percent)}%
+                    {Math.min(100, Math.round(status.progress_percent))}%
                   </div>
                   <p className="text-sm text-freya-text-muted">
                     Model {status.model_index}/{status.total_models}
@@ -1086,6 +1118,20 @@ export function BenchPage() {
             <h3 className="font-semibold text-freya-text-primary mb-4">Benchmark Settings</h3>
 
             <div className="space-y-4">
+              {/* Real-time Best Model */}
+              {currentBestModel && status?.running && (
+                <div className="bg-freya-accent-green/10 border border-freya-accent-green/30 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Star className="w-5 h-5 text-freya-accent-green" />
+                    <h4 className="text-sm font-medium text-freya-accent-green">Current Best Model</h4>
+                  </div>
+                  <div className="text-freya-text-primary font-medium">{currentBestModel.model}</div>
+                  <div className="text-xs text-freya-text-muted mt-1">
+                    Role: {currentBestModel.role} • Score: {currentBestModel.score.toFixed(1)}
+                  </div>
+                </div>
+              )}
+
               {/* Program Details */}
               <div className="bg-freya-bg-primary rounded-lg p-4">
                 <h4 className="text-sm font-medium text-freya-text-secondary mb-3">
@@ -1107,12 +1153,60 @@ export function BenchPage() {
                         </div>
                         <div className="bg-freya-bg-secondary rounded p-2">
                           <div className="text-freya-text-muted">Trials</div>
-                          <div className="font-medium text-freya-text-primary">{prog.trials}</div>
+                          <div className="font-medium text-freya-text-primary">{trialsConfig[prog.id]}</div>
                         </div>
                       </div>
                     </div>
                   )
                 })}
+              </div>
+              
+              {/* Configurable Trials */}
+              <div className="bg-freya-bg-primary rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-medium text-freya-text-secondary">
+                    Trials per Category
+                  </h4>
+                  <button
+                    onClick={() => setTrialsConfig({ 'bench-fast': 1, 'bench-standard': 5, 'bench-advanced': 5 })}
+                    className="text-xs text-freya-accent-blue hover:underline flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Restore Default
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {PROGRAMS.map((prog) => (
+                    <div key={prog.id} className="flex items-center justify-between">
+                      <span className="text-sm text-freya-text-primary">{prog.name}</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setTrialsConfig(prev => ({
+                            ...prev,
+                            [prog.id]: Math.max(1, prev[prog.id] - 1)
+                          }))}
+                          disabled={isRunning}
+                          className="w-6 h-6 rounded bg-freya-bg-secondary flex items-center justify-center text-freya-text-muted hover:text-freya-text-primary disabled:opacity-50"
+                        >
+                          -
+                        </button>
+                        <span className="w-8 text-center text-sm font-medium text-freya-text-primary">
+                          {trialsConfig[prog.id]}
+                        </span>
+                        <button
+                          onClick={() => setTrialsConfig(prev => ({
+                            ...prev,
+                            [prog.id]: Math.min(20, prev[prog.id] + 1)
+                          }))}
+                          disabled={isRunning}
+                          className="w-6 h-6 rounded bg-freya-bg-secondary flex items-center justify-center text-freya-text-muted hover:text-freya-text-primary disabled:opacity-50"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Continuous Mode Settings */}
@@ -1202,6 +1296,68 @@ export function BenchPage() {
                   >
                     <FileSpreadsheet className="w-4 h-4" />
                     CSV
+                  </button>
+                </div>
+              </div>
+              
+              {/* Delete Benchmarks Section */}
+              <div className="bg-freya-bg-primary rounded-lg p-4">
+                <h4 className="text-sm font-medium text-freya-text-secondary mb-3">
+                  Manage Benchmarks
+                </h4>
+                <p className="text-xs text-freya-text-muted mb-3">
+                  Clear benchmark results by category
+                </p>
+                <div className="space-y-2">
+                  {models && models.length > 0 && (
+                    <div className="space-y-2">
+                      <label className="text-xs text-freya-text-muted">By Model:</label>
+                      <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                        {models.slice(0, 10).map((model) => (
+                          <button
+                            key={model.name}
+                            onClick={() => {
+                              // TODO: Implement delete by model API
+                              console.log(`[Bench] Delete benchmarks for model: ${model.name}`)
+                            }}
+                            className="text-xs px-2 py-1 rounded bg-freya-bg-secondary text-freya-text-muted hover:text-freya-accent-red hover:bg-freya-accent-red/10 flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            {model.name.split(':')[0]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="pt-2 border-t border-freya-border">
+                    <label className="text-xs text-freya-text-muted">By Program:</label>
+                    <div className="flex gap-2 mt-2">
+                      {PROGRAMS.map((prog) => (
+                        <button
+                          key={prog.id}
+                          onClick={() => {
+                            // TODO: Implement delete by program API
+                            console.log(`[Bench] Delete benchmarks for program: ${prog.id}`)
+                          }}
+                          className="text-xs px-2 py-1 rounded bg-freya-bg-secondary text-freya-text-muted hover:text-freya-accent-red hover:bg-freya-accent-red/10 flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          {prog.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (confirm('Are you sure you want to delete ALL benchmark results? This cannot be undone.')) {
+                        // TODO: Implement clear all API
+                        console.log('[Bench] Clearing all benchmark results')
+                      }
+                    }}
+                    className="w-full mt-3 btn-ghost text-freya-accent-red flex items-center justify-center gap-2 border border-freya-accent-red/30"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Clear All Results
                   </button>
                 </div>
               </div>

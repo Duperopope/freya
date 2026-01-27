@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Copy, Check, Settings2, Shield, Globe, FileText, X, Paperclip, Image } from 'lucide-react'
+import { Send, Loader2, Copy, Check, Settings2, Shield, Globe, FileText, X, Paperclip, Image, Plus, Edit2, Trash2, RotateCcw, StopCircle } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -31,12 +31,19 @@ export function ChatPage() {
   const [selectedHat, setSelectedHat] = useState<string>('')
   const [showSettings, setShowSettings] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+  const [webSearchEnabled, setWebSearchEnabled] = useState(true) // Default ON
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editContent, setEditContent] = useState('')
+  const [customHats, setCustomHats] = useState<api.HatPreset[]>([])
+  const [showCreateHat, setShowCreateHat] = useState(false)
+  const [newHatName, setNewHatName] = useState('')
+  const [newHatDescription, setNewHatDescription] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   // Fetch available hats
   const { data: hats } = useQuery({
@@ -224,13 +231,78 @@ export function ChatPage() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
-  // Handle key press
+  // Handle key press - Enter to send, Ctrl/Cmd+Enter for newline
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    if (e.key === 'Enter') {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) {
+        // Allow newline with Ctrl/Cmd/Shift+Enter
+        return
+      }
       e.preventDefault()
       handleSend()
     }
   }
+
+  // Cancel last message generation
+  const cancelGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+  }
+
+  // Delete last message
+  const deleteLastMessage = () => {
+    if (messages.length > 0) {
+      setMessages(prev => prev.slice(0, -1))
+    }
+  }
+
+  // Edit message
+  const startEditMessage = (msg: Message) => {
+    setEditingMessageId(msg.id)
+    setEditContent(msg.content)
+  }
+
+  // Save edited message (removes subsequent context)
+  const saveEditedMessage = (msgId: string) => {
+    const msgIndex = messages.findIndex(m => m.id === msgId)
+    if (msgIndex >= 0) {
+      setMessages(prev => {
+        const updated = [...prev]
+        updated[msgIndex] = { ...updated[msgIndex], content: editContent }
+        // Remove all messages after the edited one to prevent context carryover
+        return updated.slice(0, msgIndex + 1)
+      })
+    }
+    setEditingMessageId(null)
+    setEditContent('')
+  }
+
+  // Cancel edit
+  const cancelEdit = () => {
+    setEditingMessageId(null)
+    setEditContent('')
+  }
+
+  // Add custom hat
+  const addCustomHat = () => {
+    if (newHatName.trim()) {
+      const newHat: api.HatPreset = {
+        name: newHatName.trim().toLowerCase().replace(/\s+/g, '_'),
+        description: newHatDescription.trim() || `Custom ${newHatName} personality`,
+        system_prompt: newHatDescription.trim(),
+        temperature: 0.7
+      }
+      setCustomHats(prev => [...prev, newHat])
+      setNewHatName('')
+      setNewHatDescription('')
+      setShowCreateHat(false)
+    }
+  }
+
+  // All hats (API + custom)
+  const allHats = [...(hats || []), ...customHats]
 
   return (
     <div className="flex h-full">
@@ -247,12 +319,19 @@ export function ChatPage() {
               className="input py-1.5 text-sm w-40"
             >
               <option value="">Default</option>
-              {hats?.map((hat) => (
+              {allHats.map((hat) => (
                 <option key={hat.name} value={hat.name}>
                   {hat.name.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                 </option>
               ))}
             </select>
+            <button
+              onClick={() => setShowCreateHat(true)}
+              className="p-1.5 rounded hover:bg-freya-bg-tertiary"
+              title="Create custom personality"
+            >
+              <Plus className="w-4 h-4 text-freya-text-muted" />
+            </button>
           </div>
           
           {/* Web Search Toggle */}
@@ -381,34 +460,99 @@ export function ChatPage() {
                   </div>
                   
                   {/* Actions */}
-                  <button
-                    onClick={() => copyMessage(message.content, message.id)}
-                    className="p-1 rounded hover:bg-freya-bg-primary/50 transition-colors"
-                    title="Copy"
-                  >
-                    {copiedId === message.id ? (
-                      <Check className="w-4 h-4 text-freya-accent-green" />
-                    ) : (
-                      <Copy className="w-4 h-4 text-freya-text-muted" />
+                  <div className="flex items-center gap-1">
+                    {message.role === 'user' && (
+                      <button
+                        onClick={() => startEditMessage(message)}
+                        className="p-1 rounded hover:bg-freya-bg-primary/50 transition-colors"
+                        title="Edit message"
+                      >
+                        <Edit2 className="w-4 h-4 text-freya-text-muted" />
+                      </button>
                     )}
-                  </button>
+                    <button
+                      onClick={() => copyMessage(message.content, message.id)}
+                      className="p-1 rounded hover:bg-freya-bg-primary/50 transition-colors"
+                      title="Copy"
+                    >
+                      {copiedId === message.id ? (
+                        <Check className="w-4 h-4 text-freya-accent-green" />
+                      ) : (
+                        <Copy className="w-4 h-4 text-freya-text-muted" />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Content */}
-                <div className="prose-freya">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {message.content}
-                  </ReactMarkdown>
-                </div>
+                {editingMessageId === message.id ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      className="w-full p-2 rounded bg-freya-bg-primary border border-freya-border text-sm"
+                      rows={3}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => saveEditedMessage(message.id)}
+                        className="btn-primary text-xs px-2 py-1"
+                      >
+                        Save (removes context)
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        className="btn-ghost text-xs px-2 py-1"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="prose-freya">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
+                )}
               </div>
             </div>
           ))}
 
-          {/* Loading indicator */}
+          {/* Loading indicator with cancel */}
           {chatMutation.isPending && (
-            <div className="flex items-center gap-2 text-freya-text-muted animate-pulse">
+            <div className="flex items-center gap-3 text-freya-text-muted animate-pulse">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span>Freya is thinking...</span>
+              <button
+                onClick={cancelGeneration}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-freya-accent-red/20 text-freya-accent-red hover:bg-freya-accent-red/30"
+              >
+                <StopCircle className="w-3 h-3" />
+                Cancel
+              </button>
+            </div>
+          )}
+          
+          {/* Quick actions when messages exist */}
+          {messages.length > 0 && !chatMutation.isPending && (
+            <div className="flex items-center gap-2 mt-2">
+              <button
+                onClick={deleteLastMessage}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-freya-bg-tertiary text-freya-text-muted hover:text-freya-accent-red"
+                title="Delete last message"
+              >
+                <Trash2 className="w-3 h-3" />
+                Delete last
+              </button>
+              <button
+                onClick={() => setMessages([])}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-freya-bg-tertiary text-freya-text-muted hover:text-freya-accent-yellow"
+                title="Clear all messages"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Clear all
+              </button>
             </div>
           )}
 
@@ -452,8 +596,8 @@ export function ChatPage() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={webSearchEnabled 
-                  ? "Ask with web search enabled... (Ctrl+Enter to send)" 
-                  : "Ask Freya anything... (Ctrl+Enter to send)"}
+                  ? "Ask with web search enabled... (Enter to send)" 
+                  : "Ask Freya anything... (Enter to send)"}
                 className="textarea min-h-[80px] pr-24"
                 disabled={chatMutation.isPending}
               />
@@ -509,7 +653,7 @@ export function ChatPage() {
           </div>
           <div className="flex items-center justify-between mt-2">
             <p className="text-xs text-freya-text-muted">
-              Press <kbd className="px-1.5 py-0.5 rounded bg-freya-bg-tertiary text-freya-text-secondary">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 rounded bg-freya-bg-tertiary text-freya-text-secondary">Enter</kbd> to send
+              Press <kbd className="px-1.5 py-0.5 rounded bg-freya-bg-tertiary text-freya-text-secondary">Enter</kbd> to send • <kbd className="px-1.5 py-0.5 rounded bg-freya-bg-tertiary text-freya-text-secondary">Ctrl+Enter</kbd> for newline
             </p>
             <div className="flex items-center gap-3 text-xs">
               {webSearchEnabled && (
@@ -559,7 +703,7 @@ export function ChatPage() {
                 Hat Presets
               </label>
               <div className="space-y-1">
-                {hats?.map((hat) => (
+                {allHats.map((hat) => (
                   <button
                     key={hat.name}
                     onClick={() => setSelectedHat(hat.name)}
@@ -574,7 +718,54 @@ export function ChatPage() {
                     <div className="text-xs text-freya-text-muted">{hat.description}</div>
                   </button>
                 ))}
+                <button
+                  onClick={() => setShowCreateHat(true)}
+                  className="w-full text-left p-2 rounded text-sm bg-freya-bg-tertiary text-freya-text-muted hover:bg-freya-bg-elevated border border-dashed border-freya-border"
+                >
+                  <Plus className="w-4 h-4 inline mr-2" />
+                  Create custom personality
+                </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Custom Hat Modal */}
+      {showCreateHat && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-freya-bg-secondary rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-freya-text-primary mb-4">
+              Create Custom Personality
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-freya-text-secondary mb-1">Name</label>
+                <input
+                  type="text"
+                  value={newHatName}
+                  onChange={(e) => setNewHatName(e.target.value)}
+                  placeholder="e.g., security_expert, creative_writer"
+                  className="input w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-freya-text-secondary mb-1">Description / System Prompt</label>
+                <textarea
+                  value={newHatDescription}
+                  onChange={(e) => setNewHatDescription(e.target.value)}
+                  placeholder="Describe the personality and behavior..."
+                  className="textarea w-full min-h-[100px]"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={addCustomHat} className="btn-primary flex-1">
+                Create
+              </button>
+              <button onClick={() => setShowCreateHat(false)} className="btn-ghost">
+                Cancel
+              </button>
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
 /**
- * BMADPage - BMAD Studio v2.1
+ * BMADPage - BMAD Studio v2.2
  * 
  * Professional interface for managing the BMAD (Business Model - Architecture - Development)
  * workflow with interactive brainstorming, real-time agent monitoring, and continuous pipeline.
@@ -35,7 +35,12 @@ import {
   FileJson,
   Repeat,
   Timer,
-  Activity
+  Activity,
+  ChevronLeft,
+  FolderOpen,
+  History,
+  PanelLeftClose,
+  PanelLeft
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
@@ -192,6 +197,13 @@ export function BMADPage() {
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null)
   const [pipelineErrors, setPipelineErrors] = useState<PipelineError[]>([])
   const [startTime, setStartTime] = useState<Date | null>(null)
+  
+  // Analyst panel state - Always visible by default with hide option
+  const [showAnalystPanel, setShowAnalystPanel] = useState(true)
+  
+  // Recent projects state
+  const [recentProjects, setRecentProjects] = useState<{ name: string; lastModified: string; goal: string }[]>([])
+  const [showRecentProjects, setShowRecentProjects] = useState(false)
 
   // Fetch BMAD status
   const { data: status, refetch: refetchStatus } = useQuery({
@@ -248,8 +260,37 @@ export function BMADPage() {
       setAgentLogs([])
       refetchStatus()
       refetchArtifacts()
+      // Save to recent projects
+      saveToRecentProjects()
     },
   })
+  
+  // Save current project to recent projects
+  const saveToRecentProjects = () => {
+    const project = { name: projectName, lastModified: new Date().toISOString(), goal: goal.slice(0, 100) }
+    setRecentProjects(prev => {
+      const filtered = prev.filter(p => p.name !== projectName)
+      return [project, ...filtered].slice(0, 10)
+    })
+    // Persist to localStorage
+    try {
+      const projects = JSON.parse(localStorage.getItem('freya_recent_projects') || '[]')
+      const filtered = projects.filter((p: { name: string }) => p.name !== projectName)
+      localStorage.setItem('freya_recent_projects', JSON.stringify([project, ...filtered].slice(0, 10)))
+    } catch (e) {
+      console.error('Failed to save recent projects:', e)
+    }
+  }
+  
+  // Load recent projects on mount
+  useEffect(() => {
+    try {
+      const projects = JSON.parse(localStorage.getItem('freya_recent_projects') || '[]')
+      setRecentProjects(projects)
+    } catch (e) {
+      console.error('Failed to load recent projects:', e)
+    }
+  }, [])
 
   // Load artifact content
   useEffect(() => {
@@ -515,20 +556,102 @@ Répondez à ces questions ou posez-moi les vôtres !`,
 
       {/* Main Content */}
       <div className="flex-1 overflow-hidden flex">
-        {/* Brainstorm Chat - Always visible, expandable */}
-        {(mode === 'brainstorm' || chatMessages.length > 0) && (
+        {/* Analyst Panel Toggle Button (when panel is hidden) */}
+        {!showAnalystPanel && (
+          <button
+            onClick={() => setShowAnalystPanel(true)}
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-2 bg-freya-bg-secondary border border-freya-border rounded-r-lg shadow-lg hover:bg-freya-bg-tertiary"
+            title="Show Analyst Panel"
+          >
+            <PanelLeft className="w-5 h-5 text-freya-accent-blue" />
+          </button>
+        )}
+        
+        {/* Brainstorm Chat - Always visible with hide option */}
+        {showAnalystPanel && (
           <div className={clsx(
-            'border-r border-freya-border flex flex-col bg-freya-bg-secondary transition-all',
+            'border-r border-freya-border flex flex-col bg-freya-bg-secondary transition-all relative',
             mode === 'brainstorm' ? 'w-96' : 'w-80'
           )}>
+            {/* Panel Header with Hide Button */}
             <div className="p-4 border-b border-freya-border">
-              <h3 className="font-semibold text-freya-text-primary flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-freya-accent-blue" />
-                Brainstorming with Analyst
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-freya-text-primary flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-freya-accent-blue" />
+                  Analyst Panel
+                </h3>
+                <button
+                  onClick={() => setShowAnalystPanel(false)}
+                  className="p-1 rounded hover:bg-freya-bg-tertiary"
+                  title="Hide Analyst Panel"
+                >
+                  <PanelLeftClose className="w-4 h-4 text-freya-text-muted" />
+                </button>
+              </div>
               <p className="text-xs text-freya-text-muted mt-1">
                 Clarify your requirements before starting the pipeline
               </p>
+            </div>
+            
+            {/* Recent Projects Section */}
+            <div className="border-b border-freya-border">
+              <button
+                onClick={() => setShowRecentProjects(!showRecentProjects)}
+                className="w-full flex items-center justify-between p-3 hover:bg-freya-bg-tertiary/50"
+              >
+                <span className="flex items-center gap-2 text-sm text-freya-text-secondary">
+                  <History className="w-4 h-4" />
+                  Recent Projects
+                </span>
+                <ChevronDown className={clsx('w-4 h-4 text-freya-text-muted transition-transform', showRecentProjects && 'rotate-180')} />
+              </button>
+              
+              {showRecentProjects && (
+                <div className="px-3 pb-3 space-y-2 max-h-48 overflow-y-auto">
+                  {recentProjects.length > 0 ? (
+                    recentProjects.map((project, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setProjectName(project.name)
+                          setGoal(project.goal)
+                          setShowRecentProjects(false)
+                        }}
+                        className="w-full text-left p-2 rounded bg-freya-bg-primary hover:bg-freya-bg-tertiary"
+                      >
+                        <div className="flex items-center gap-2">
+                          <FolderOpen className="w-4 h-4 text-freya-accent-yellow" />
+                          <span className="font-medium text-freya-text-primary text-sm truncate">{project.name}</span>
+                        </div>
+                        <p className="text-xs text-freya-text-muted mt-1 truncate">{project.goal}</p>
+                        <p className="text-xs text-freya-text-muted/60 mt-0.5">
+                          {new Date(project.lastModified).toLocaleDateString()}
+                        </p>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="text-xs text-freya-text-muted text-center py-2">No recent projects</p>
+                  )}
+                  
+                  {/* New Project Button */}
+                  <button
+                    onClick={() => {
+                      setProjectName('NewProject')
+                      setGoal('')
+                      setChatMessages([])
+                      setBrainstormComplete(false)
+                      setMode('brainstorm')
+                      setShowRecentProjects(false)
+                    }}
+                    className="w-full text-left p-2 rounded border border-dashed border-freya-border hover:border-freya-accent-blue hover:bg-freya-accent-blue/5"
+                  >
+                    <div className="flex items-center gap-2 text-freya-accent-blue">
+                      <Sparkles className="w-4 h-4" />
+                      <span className="text-sm">Start New Project</span>
+                    </div>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Chat Messages */}

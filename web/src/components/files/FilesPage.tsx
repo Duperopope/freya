@@ -1,11 +1,11 @@
 /**
- * FilesPage - File Browser & Editor
+ * FilesPage - File Browser & Editor v2.2
  * 
  * Professional file management interface with directory tree navigation,
- * file preview, and integrated editor for text files.
+ * file preview, integrated editor, and modern context menus.
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   Folder,
   FolderOpen,
@@ -24,7 +24,12 @@ import {
   X,
   HardDrive,
   ArrowLeft,
-  Code2
+  Code2,
+  Copy,
+  Trash2,
+  ExternalLink,
+  Clipboard,
+  MoreVertical
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
@@ -88,6 +93,14 @@ const getLanguage = (name: string): string => {
 //   expanded?: boolean
 // }
 
+// Context menu state
+interface ContextMenuState {
+  show: boolean
+  x: number
+  y: number
+  entry: api.FileEntry | null
+}
+
 export function FilesPage() {
   const queryClient = useQueryClient()
   const [currentPath, setCurrentPath] = useState('')
@@ -97,6 +110,87 @@ export function FilesPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set(['']))
+  
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({ show: false, x: 0, y: 0, entry: null })
+  const contextMenuRef = useRef<HTMLDivElement>(null)
+  
+  // Rename dialog state
+  const [showRenameDialog, setShowRenameDialog] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
+  const [renameEntry, setRenameEntry] = useState<api.FileEntry | null>(null)
+  
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu({ show: false, x: 0, y: 0, entry: null })
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+  
+  // Context menu actions
+  const handleContextMenu = (e: React.MouseEvent, entry: api.FileEntry) => {
+    e.preventDefault()
+    setContextMenu({ show: true, x: e.clientX, y: e.clientY, entry })
+  }
+  
+  const copyPath = () => {
+    if (contextMenu.entry) {
+      navigator.clipboard.writeText(contextMenu.entry.path)
+      setContextMenu({ show: false, x: 0, y: 0, entry: null })
+    }
+  }
+  
+  const duplicateFile = async () => {
+    if (contextMenu.entry && !contextMenu.entry.is_dir) {
+      const originalPath = contextMenu.entry.path
+      const ext = originalPath.split('.').pop()
+      const baseName = originalPath.replace(`.${ext}`, '')
+      const newPath = `${baseName}_copy.${ext}`
+      
+      try {
+        const content = await api.readFile(originalPath)
+        await api.writeFile(newPath, content.content)
+        queryClient.invalidateQueries({ queryKey: ['files'] })
+      } catch (error) {
+        console.error('Failed to duplicate file:', error)
+      }
+    }
+    setContextMenu({ show: false, x: 0, y: 0, entry: null })
+  }
+  
+  const startRename = () => {
+    if (contextMenu.entry) {
+      setRenameEntry(contextMenu.entry)
+      setRenameValue(contextMenu.entry.name)
+      setShowRenameDialog(true)
+    }
+    setContextMenu({ show: false, x: 0, y: 0, entry: null })
+  }
+  
+  const confirmRename = async () => {
+    if (renameEntry && renameValue.trim()) {
+      // TODO: Implement rename API
+      console.log(`Rename ${renameEntry.path} to ${renameValue}`)
+    }
+    setShowRenameDialog(false)
+    setRenameEntry(null)
+    setRenameValue('')
+  }
+  
+  const deleteFile = async () => {
+    if (contextMenu.entry) {
+      const confirmed = confirm(`Are you sure you want to delete "${contextMenu.entry.name}"?`)
+      if (confirmed) {
+        // TODO: Implement delete API
+        console.log(`Delete ${contextMenu.entry.path}`)
+      }
+    }
+    setContextMenu({ show: false, x: 0, y: 0, entry: null })
+  }
 
   // Fetch directory listing
   const { data: listing, isLoading } = useQuery({
@@ -250,8 +344,9 @@ export function FilesPage() {
                   <button
                     key={entry.path}
                     onClick={() => handleFileSelect(entry)}
+                    onContextMenu={(e) => handleContextMenu(e, entry)}
                     className={clsx(
-                      'w-full flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors',
+                      'w-full flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors group',
                       isSelected
                         ? 'bg-freya-accent-blue/10 text-freya-accent-blue'
                         : 'text-freya-text-secondary hover:text-freya-text-primary hover:bg-freya-bg-tertiary'
@@ -267,6 +362,13 @@ export function FilesPage() {
                       <Icon className={clsx('w-4 h-4', isSelected ? 'text-freya-accent-blue' : 'text-freya-text-muted')} />
                     )}
                     <span className="text-sm truncate flex-1 text-left">{entry.name}</span>
+                    {/* Context menu trigger */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleContextMenu(e, entry) }}
+                      className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-freya-bg-tertiary"
+                    >
+                      <MoreVertical className="w-3 h-3" />
+                    </button>
                     {!entry.is_dir && entry.size_bytes !== undefined && (
                       <span className="text-xs text-freya-text-muted">
                         {entry.size_bytes < 1024
@@ -445,6 +547,96 @@ export function FilesPage() {
               <div className="text-freya-text-primary text-sm">
                 {fileContent.split('\n').length}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Context Menu */}
+      {contextMenu.show && contextMenu.entry && (
+        <div
+          ref={contextMenuRef}
+          className="fixed z-50 bg-freya-bg-secondary border border-freya-border rounded-lg shadow-xl py-1 min-w-[180px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            onClick={copyPath}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-freya-text-primary hover:bg-freya-bg-tertiary"
+          >
+            <Clipboard className="w-4 h-4" />
+            Copy Path
+            <span className="ml-auto text-xs text-freya-text-muted">Ctrl+Shift+C</span>
+          </button>
+          
+          {!contextMenu.entry.is_dir && (
+            <button
+              onClick={duplicateFile}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-freya-text-primary hover:bg-freya-bg-tertiary"
+            >
+              <Copy className="w-4 h-4" />
+              Duplicate
+              <span className="ml-auto text-xs text-freya-text-muted">Ctrl+D</span>
+            </button>
+          )}
+          
+          <button
+            onClick={startRename}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-freya-text-primary hover:bg-freya-bg-tertiary"
+          >
+            <Edit3 className="w-4 h-4" />
+            Rename
+            <span className="ml-auto text-xs text-freya-text-muted">F2</span>
+          </button>
+          
+          <div className="border-t border-freya-border my-1" />
+          
+          <button
+            onClick={() => {
+              // Open in external explorer (logs for now)
+              console.log(`Open in explorer: ${contextMenu.entry?.path}`)
+              setContextMenu({ show: false, x: 0, y: 0, entry: null })
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-freya-text-primary hover:bg-freya-bg-tertiary"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Show in Explorer
+          </button>
+          
+          <div className="border-t border-freya-border my-1" />
+          
+          <button
+            onClick={deleteFile}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-freya-accent-red hover:bg-freya-accent-red/10"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete
+            <span className="ml-auto text-xs text-freya-text-muted">Del</span>
+          </button>
+        </div>
+      )}
+      
+      {/* Rename Dialog */}
+      {showRenameDialog && renameEntry && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-freya-bg-secondary rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-freya-text-primary mb-4">
+              Rename {renameEntry.is_dir ? 'Folder' : 'File'}
+            </h3>
+            <input
+              type="text"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && confirmRename()}
+              className="input w-full"
+              autoFocus
+            />
+            <div className="flex gap-3 mt-6">
+              <button onClick={confirmRename} className="btn-primary flex-1">
+                Rename
+              </button>
+              <button onClick={() => setShowRenameDialog(false)} className="btn-ghost">
+                Cancel
+              </button>
             </div>
           </div>
         </div>

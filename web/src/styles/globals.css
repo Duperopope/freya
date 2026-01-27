@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* CSS Variables for Theme Support */
+:root {
+  --freya-bg-primary: #0a0e14;
+  --freya-bg-secondary: #0f1419;
+  --freya-bg-tertiary: #151b23;
+  --freya-bg-elevated: #1a2230;
+  --freya-border: #2d3748;
+  --freya-border-light: #3d4a5c;
+  --freya-text-primary: #e6edf3;
+  --freya-text-secondary: #8b949e;
+  --freya-text-muted: #6b7280;
+  --freya-accent-blue: #58a6ff;
+  --freya-accent-green: #3fb950;
+  --freya-accent-yellow: #d29922;
+  --freya-accent-red: #f85149;
+  --freya-accent-purple: #a371f7;
+  --freya-accent-cyan: #39d4ff;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
@@ -24,7 +43,7 @@
 /* Selection */
 ::selection {
   background: rgba(88, 166, 255, 0.3);
-  color: #e6edf3;
+  color: var(--freya-text-primary);
 }
 
 /* Base styles */
