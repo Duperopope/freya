@@ -55,12 +55,12 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { id: 'global', name: 'Global', icon: Globe, description: 'General settings & defaults' },
-  { id: 'paths', name: 'Paths', icon: Folder, description: 'Configure directory paths' },
-  { id: 'ollama', name: 'Ollama', icon: Server, description: 'LLM server connection' },
-  { id: 'routing', name: 'Model Routing', icon: Brain, description: 'Per-role model assignment' },
-  { id: 'providers', name: 'Providers', icon: Cloud, description: 'Hybrid routing & quotas' },
-  { id: 'prompts', name: 'Prompts', icon: FileCode, description: 'System prompts management' },
+  { id: 'providers', name: 'Providers & Routing', icon: Cloud, description: 'LLM providers & hybrid routing' },
   { id: 'api', name: 'API Keys', icon: Key, description: 'External API integrations' },
+  { id: 'routing', name: 'Model Routing', icon: Brain, description: 'Per-role model assignment' },
+  { id: 'ollama', name: 'Ollama', icon: Server, description: 'LLM server connection' },
+  { id: 'paths', name: 'Paths', icon: Folder, description: 'Configure directory paths' },
+  { id: 'prompts', name: 'Prompts', icon: FileCode, description: 'System prompts management' },
   { id: 'appearance', name: 'Appearance', icon: Palette, description: 'UI preferences' },
   { id: 'about', name: 'About', icon: Info, description: 'Version and system info' }
 ]
@@ -471,15 +471,37 @@ export function SettingsPage() {
   }
   
   // Save provider key with persistence
-  const saveProviderKey = (providerId: string, key: string) => {
-    // Update backend
-    updateProviderKeyMutation.mutate({ provider: providerId, apiKey: key })
-    
-    // Also persist to localStorage for recovery
-    const newKeys = { ...providerKeys, [providerId]: key ? '***saved***' : '' }
-    setProviderKeys(prev => ({ ...prev, [providerId]: '' }))
-    localStorage.setItem('freya_provider_keys', JSON.stringify(newKeys))
+  const saveProviderKey = async (providerId: string, key: string) => {
+    try {
+      // Update backend
+      await updateProviderKeyMutation.mutateAsync({ provider: providerId, apiKey: key })
+      
+      // Clear input after successful save
+      setProviderKeys(prev => ({ ...prev, [providerId]: '' }))
+      
+      // Persist to localStorage for recovery (encrypted indicator, not the actual key)
+      const savedKeysIndicator = JSON.parse(localStorage.getItem('freya_provider_keys_configured') || '{}')
+      savedKeysIndicator[providerId] = { configured: !!key, configuredAt: new Date().toISOString() }
+      localStorage.setItem('freya_provider_keys_configured', JSON.stringify(savedKeysIndicator))
+      
+      // Show success feedback with brief notification
+      setCopiedPath(`provider-${providerId}`)
+      setTimeout(() => setCopiedPath(null), 2000)
+      
+      // Refresh providers to update status
+      refetchProviders()
+    } catch (error) {
+      alert(`Failed to save API key: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
   }
+  
+  // Load configured providers indicator on mount
+  useEffect(() => {
+    const configuredIndicators = localStorage.getItem('freya_provider_keys_configured')
+    if (configuredIndicators) {
+      console.log('[Settings] Previously configured providers:', Object.keys(JSON.parse(configuredIndicators)))
+    }
+  }, [])
 
   // Load API keys from localStorage on mount
   useEffect(() => {
@@ -1012,14 +1034,81 @@ export function SettingsPage() {
             </div>
           )}
 
-          {/* Providers Tab (v2.2 Hybrid Routing) */}
+          {/* Providers Tab (v2.4 Hybrid Routing) */}
           {activeTab === 'providers' && (
             <div className="space-y-6 animate-fade-in">
               <div>
-                <h3 className="text-xl font-semibold text-freya-text-primary mb-2">Hybrid Routing & Providers</h3>
+                <h3 className="text-xl font-semibold text-freya-text-primary mb-2">Providers & Hybrid Routing</h3>
                 <p className="text-freya-text-muted">
-                  Configure local/remote LLM routing with multi-provider support and quota management.
+                  Configure LLM providers, API keys, and hybrid routing between local and remote models.
                 </p>
+              </div>
+              
+              {/* Hybrid Routing Configuration - Moved from Global */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-medium text-freya-text-primary flex items-center gap-2">
+                    <Brain className="w-5 h-5 text-freya-accent-yellow" />
+                    Hybrid Routing Configuration
+                  </h4>
+                  <button
+                    onClick={saveHybridConfig}
+                    disabled={updateHybridConfigMutation.isPending}
+                    className="btn-primary px-3 py-1.5 text-sm flex items-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <label className="block text-sm text-freya-text-muted mb-2">Threshold (% better)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={editedHybridConfig.threshold}
+                      onChange={(e) => setEditedHybridConfig(prev => ({ ...prev, threshold: parseInt(e.target.value) || 0 }))}
+                      className="input w-full"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">Remote must be X% better than local</p>
+                  </div>
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <label className="block text-sm text-freya-text-muted mb-2">Local Min Score</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={editedHybridConfig.localMinScore}
+                      onChange={(e) => setEditedHybridConfig(prev => ({ ...prev, localMinScore: parseInt(e.target.value) || 0 }))}
+                      className="input w-full"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">Minimum local score to use local</p>
+                  </div>
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <label className="block text-sm text-freya-text-muted mb-2">Fallback Chain</label>
+                    <input
+                      type="text"
+                      value={editedHybridConfig.fallbackChain}
+                      onChange={(e) => setEditedHybridConfig(prev => ({ ...prev, fallbackChain: e.target.value }))}
+                      className="input w-full font-mono text-sm"
+                      placeholder="groq,hf,together,local"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">Comma-separated provider order</p>
+                  </div>
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <label className="block text-sm text-freya-text-muted mb-2">Max Retries</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={editedHybridConfig.maxRetries}
+                      onChange={(e) => setEditedHybridConfig(prev => ({ ...prev, maxRetries: parseInt(e.target.value) || 1 }))}
+                      className="input w-full"
+                    />
+                    <p className="text-xs text-freya-text-muted mt-1">Retries before fallback</p>
+                  </div>
+                </div>
               </div>
 
               {/* Hybrid Routing Status */}
@@ -1219,10 +1308,16 @@ export function SettingsPage() {
                             )}
                           </button>
                         </div>
-                        {provider.has_api_key && (
+                        {copiedPath === `provider-${id}` && (
+                          <div className="text-xs text-freya-accent-green flex items-center gap-1 animate-fade-in">
+                            <CheckCircle2 className="w-3 h-3" />
+                            API key saved successfully!
+                          </div>
+                        )}
+                        {provider.has_api_key && copiedPath !== `provider-${id}` && (
                           <div className="text-xs text-freya-accent-green flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3" />
-                            API key configured and saved
+                            API key configured and persisted
                           </div>
                         )}
                         {!provider.has_api_key && provider.enabled && (

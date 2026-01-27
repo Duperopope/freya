@@ -152,6 +152,9 @@ export function BenchPage() {
   // Current best model (real-time)
   const [currentBestModel, setCurrentBestModel] = useState<{ role: string; model: string; score: number } | null>(null)
   
+  // Real-time interim results during benchmark
+  const [interimResults, setInterimResults] = useState<{ role: string; model: string; score: number; timestamp: Date }[]>([])
+  
   // Time estimation state
   const [phaseStartTime, setPhaseStartTime] = useState<Date | null>(null)
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string | null>(null)
@@ -180,21 +183,63 @@ export function BenchPage() {
     queryFn: api.getBillboard,
   })
 
-  // Fetch history
+  // Fetch history for selected program
   const { data: history, isLoading: historyLoading, error: historyError } = useQuery({
     queryKey: ['benchHistory', selectedProgram],
     queryFn: () => api.getBenchHistory(selectedProgram, 100),
+    refetchInterval: benchProgress?.running ? 2000 : 30000, // Refresh more often during bench
   })
+  
+  // Fetch history for all programs to find best available data
+  const { data: historyFast } = useQuery({
+    queryKey: ['benchHistory', 'bench-fast'],
+    queryFn: () => api.getBenchHistory('bench-fast', 100),
+  })
+  const { data: historyStandard } = useQuery({
+    queryKey: ['benchHistory', 'bench-standard'],
+    queryFn: () => api.getBenchHistory('bench-standard', 100),
+  })
+  const { data: historyAdvanced } = useQuery({
+    queryKey: ['benchHistory', 'bench-advanced'],
+    queryFn: () => api.getBenchHistory('bench-advanced', 100),
+  })
+  
+  // Auto-select best available program (highest tier with data)
+  useEffect(() => {
+    // Don't auto-switch if user explicitly selected or if running
+    if (benchProgress?.running) return
+    
+    // Check programs from highest to lowest tier
+    if (historyAdvanced && historyAdvanced.length > 0) {
+      if (selectedProgram !== 'bench-advanced' && (!history || history.length === 0)) {
+        console.log('[Bench] Auto-switching to bench-advanced (has data)')
+        setSelectedProgram('bench-advanced')
+      }
+    } else if (historyStandard && historyStandard.length > 0) {
+      if (selectedProgram !== 'bench-standard' && (!history || history.length === 0)) {
+        console.log('[Bench] Auto-switching to bench-standard (has data)')
+        setSelectedProgram('bench-standard')
+      }
+    } else if (historyFast && historyFast.length > 0) {
+      if (selectedProgram !== 'bench-fast' && (!history || history.length === 0)) {
+        console.log('[Bench] Auto-switching to bench-fast (has data)')
+        setSelectedProgram('bench-fast')
+      }
+    }
+  }, [historyFast, historyStandard, historyAdvanced, selectedProgram, history, benchProgress?.running])
   
   // Debug: log history state
   useEffect(() => {
     console.log('[Bench] History data:', { 
       program: selectedProgram,
       historyLength: history?.length || 0,
+      fastLength: historyFast?.length || 0,
+      standardLength: historyStandard?.length || 0,
+      advancedLength: historyAdvanced?.length || 0,
       historyLoading,
       historyError: historyError?.message
     })
-  }, [history, selectedProgram, historyLoading, historyError])
+  }, [history, historyFast, historyStandard, historyAdvanced, selectedProgram, historyLoading, historyError])
 
   // Fetch models for manual selection
   const { data: models } = useQuery({
@@ -260,9 +305,9 @@ export function BenchPage() {
     }
   }, [status, setBenchProgress, continuousMode, continuousPhase, autoAdvance, phaseStartTime])
   
-  // Update current best model in real-time from billboard
+  // Update current best model in real-time from billboard and track interim results
   useEffect(() => {
-    if (billboard && billboard.length > 0 && status?.running) {
+    if (billboard && billboard.length > 0) {
       // Find the best scoring model across all roles
       const best = billboard.reduce((acc, entry) => {
         if (!acc || entry.score > acc.score) {
@@ -271,8 +316,32 @@ export function BenchPage() {
         return acc
       }, null as { role: string; model: string; score: number } | null)
       setCurrentBestModel(best)
+      
+      // Update interim results when running - track new results as they come in
+      if (status?.running) {
+        setInterimResults(prev => {
+          // Add any new results that we haven't seen yet
+          const existingKeys = new Set(prev.map(r => `${r.role}-${r.model}`))
+          const newResults = billboard
+            .filter(entry => !existingKeys.has(`${entry.role}-${entry.model}`))
+            .map(entry => ({
+              role: entry.role,
+              model: entry.model,
+              score: entry.score,
+              timestamp: new Date()
+            }))
+          return [...prev, ...newResults]
+        })
+      }
     }
   }, [billboard, status?.running])
+  
+  // Clear interim results when benchmark starts
+  useEffect(() => {
+    if (status?.running && !phaseStartTime) {
+      setInterimResults([])
+    }
+  }, [status?.running, phaseStartTime])
 
   // Start benchmark mutation with guard against double-start
   const startMutation = useMutation({
@@ -1164,15 +1233,45 @@ export function BenchPage() {
 
             <div className="space-y-4">
               {/* Real-time Best Model */}
-              {currentBestModel && status?.running && (
+              {currentBestModel && (
                 <div className="bg-freya-accent-green/10 border border-freya-accent-green/30 rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Star className="w-5 h-5 text-freya-accent-green" />
-                    <h4 className="text-sm font-medium text-freya-accent-green">Current Best Model</h4>
+                    <h4 className="text-sm font-medium text-freya-accent-green">
+                      {status?.running ? 'Current Best Model (Live)' : 'Best Model'}
+                    </h4>
                   </div>
                   <div className="text-freya-text-primary font-medium">{currentBestModel.model}</div>
                   <div className="text-xs text-freya-text-muted mt-1">
                     Role: {currentBestModel.role} • Score: {currentBestModel.score.toFixed(1)}
+                  </div>
+                </div>
+              )}
+              
+              {/* Live Results Feed */}
+              {status?.running && interimResults.length > 0 && (
+                <div className="bg-freya-bg-primary rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-freya-text-secondary mb-3 flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-freya-accent-cyan animate-pulse" />
+                    Live Results ({interimResults.length})
+                  </h4>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {interimResults.slice(-10).reverse().map((result, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2 bg-freya-bg-secondary rounded text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-freya-accent-cyan capitalize">{result.role}</span>
+                          <span className="text-freya-text-muted">→</span>
+                          <span className="text-freya-text-primary font-mono">{result.model}</span>
+                        </div>
+                        <span className={clsx(
+                          'font-medium',
+                          result.score >= 80 ? 'text-freya-accent-green' :
+                          result.score >= 60 ? 'text-freya-accent-yellow' : 'text-freya-accent-red'
+                        )}>
+                          {result.score.toFixed(1)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

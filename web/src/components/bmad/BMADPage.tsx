@@ -189,6 +189,13 @@ export function BMADPage() {
   const [brainstormComplete, setBrainstormComplete] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   
+  // Analyst chat history
+  const [analystHistory, setAnalystHistory] = useState<{ projectName: string; messages: ChatMessage[]; updatedAt: string }[]>([])
+  const [showAnalystHistory, setShowAnalystHistory] = useState(false)
+  
+  // Quick action suggestions from analyst
+  const [quickSuggestions, setQuickSuggestions] = useState<string[]>([])
+  
   // Pipeline state
   const [selectedArtifact, setSelectedArtifact] = useState<string | null>(null)
   const [artifactContent, setArtifactContent] = useState<string>('')
@@ -247,6 +254,69 @@ export function BMADPage() {
   // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages])
+  
+  // Load chat history from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedHistory = localStorage.getItem('freya_analyst_chat_history')
+      if (savedHistory) {
+        setAnalystHistory(JSON.parse(savedHistory))
+      }
+    } catch (e) {
+      console.error('Failed to load analyst chat history:', e)
+    }
+  }, [])
+  
+  // Save chat messages for current project to localStorage
+  useEffect(() => {
+    if (chatMessages.length > 0 && projectName) {
+      try {
+        const history = JSON.parse(localStorage.getItem('freya_analyst_chat_history') || '[]')
+        const updatedHistory = [
+          { projectName, messages: chatMessages, updatedAt: new Date().toISOString() },
+          ...history.filter((h: { projectName: string }) => h.projectName !== projectName)
+        ].slice(0, 20) // Keep last 20 project histories
+        localStorage.setItem('freya_analyst_chat_history', JSON.stringify(updatedHistory))
+        setAnalystHistory(updatedHistory)
+      } catch (e) {
+        console.error('Failed to save analyst chat history:', e)
+      }
+    }
+  }, [chatMessages, projectName])
+  
+  // Extract quick suggestions from analyst responses
+  useEffect(() => {
+    const lastAssistantMessage = [...chatMessages].reverse().find(m => m.role === 'assistant')
+    if (lastAssistantMessage) {
+      // Extract numbered items or questions
+      const content = lastAssistantMessage.content
+      const suggestions: string[] = []
+      
+      // Match numbered items (1. 2. 3.)
+      const numberedMatches = content.match(/\d+\.\s*\*{0,2}([^\n*]+)/g)
+      if (numberedMatches) {
+        numberedMatches.slice(0, 4).forEach(match => {
+          const cleaned = match.replace(/^\d+\.\s*\*{0,2}/, '').replace(/\*{0,2}$/, '').trim()
+          if (cleaned.length > 10 && cleaned.length < 100) {
+            suggestions.push(cleaned)
+          }
+        })
+      }
+      
+      // Match questions ending with ?
+      const questionMatches = content.match(/[^.!?\n]+\?/g)
+      if (questionMatches) {
+        questionMatches.slice(0, 3).forEach(match => {
+          const cleaned = match.trim()
+          if (cleaned.length > 15 && cleaned.length < 100 && !suggestions.includes(cleaned)) {
+            suggestions.push(cleaned)
+          }
+        })
+      }
+      
+      setQuickSuggestions(suggestions.slice(0, 4))
+    }
   }, [chatMessages])
 
   // Start BMAD mutation
@@ -775,6 +845,33 @@ Répondez à ces questions ou posez-moi les vôtres !`,
                   Brainstorming complete! Ready to launch pipeline.
                 </div>
               )}
+              
+              {/* Quick Suggestions - Clickable */}
+              {quickSuggestions.length > 0 && !brainstormComplete && !isBrainstorming && (
+                <div className="mb-3">
+                  <div className="text-xs text-freya-text-muted mb-2 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    Quick responses:
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {quickSuggestions.map((suggestion, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setChatInput(suggestion)
+                          // Optionally auto-send
+                          // sendBrainstormMessage()
+                        }}
+                        className="text-xs px-2 py-1 rounded-full bg-freya-bg-tertiary text-freya-text-secondary hover:bg-freya-accent-blue/20 hover:text-freya-accent-blue transition-colors truncate max-w-[200px]"
+                        title={suggestion}
+                      >
+                        {suggestion.slice(0, 40)}{suggestion.length > 40 ? '...' : ''}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -793,13 +890,48 @@ Répondez à ces questions ou posez-moi les vôtres !`,
                   <Send className="w-5 h-5" />
                 </button>
               </div>
-              {mode !== 'brainstorm' && chatMessages.length > 0 && (
-                <button
-                  onClick={() => setMode('brainstorm')}
-                  className="mt-2 text-xs text-freya-accent-blue hover:underline"
-                >
-                  Continue brainstorming
-                </button>
+              
+              {/* Chat History Access */}
+              {analystHistory.length > 0 && (
+                <div className="mt-2 flex items-center justify-between">
+                  <button
+                    onClick={() => setShowAnalystHistory(!showAnalystHistory)}
+                    className="text-xs text-freya-text-muted hover:text-freya-accent-blue flex items-center gap-1"
+                  >
+                    <History className="w-3 h-3" />
+                    {showAnalystHistory ? 'Hide history' : 'Load from history'}
+                  </button>
+                  {mode !== 'brainstorm' && chatMessages.length > 0 && (
+                    <button
+                      onClick={() => setMode('brainstorm')}
+                      className="text-xs text-freya-accent-blue hover:underline"
+                    >
+                      Continue brainstorming
+                    </button>
+                  )}
+                </div>
+              )}
+              
+              {/* Chat History Dropdown */}
+              {showAnalystHistory && (
+                <div className="mt-2 p-2 bg-freya-bg-primary rounded border border-freya-border max-h-32 overflow-y-auto">
+                  {analystHistory.map((h, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setProjectName(h.projectName)
+                        setChatMessages(h.messages.map(m => ({ ...m, timestamp: new Date(m.timestamp) })))
+                        setShowAnalystHistory(false)
+                      }}
+                      className="w-full text-left p-2 rounded hover:bg-freya-bg-tertiary text-xs"
+                    >
+                      <div className="font-medium text-freya-text-primary">{h.projectName}</div>
+                      <div className="text-freya-text-muted truncate">
+                        {h.messages.length} messages • {new Date(h.updatedAt).toLocaleDateString()}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           </div>
