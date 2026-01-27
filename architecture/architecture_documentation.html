@@ -1,0 +1,3923 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Freya – Architecture Mindmap</title>
+
+    <!-- Fonts (optionnel mais clean) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      :root {
+        /* Color set (on reste sur ton vibe) */
+        --bg: #0b1220;
+        --panel: rgba(17, 24, 39, 0.72);
+        --panel-border: rgba(148, 163, 184, 0.22);
+        --text: #e5e7eb;
+        --muted: rgba(229, 231, 235, 0.68);
+        --btn: rgba(30, 41, 59, 0.9);
+        --btn-hover: rgba(51, 65, 85, 0.95);
+        --accent: #60a5fa;
+
+        /* Typography */
+        --ui-font:
+          Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        --mm-font:
+          Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        font-family: var(--ui-font);
+        background: radial-gradient(
+          1200px 600px at 10% 10%,
+          #0f1b31 0%,
+          var(--bg) 50%,
+          #060a12 100%
+        );
+        color: var(--text);
+      }
+
+      .container {
+        max-width: 1200px;
+        padding: 20px;
+        margin: 0 auto;
+      }
+
+      .header {
+        padding: 22px 18px;
+        border: 1px solid var(--panel-border);
+        border-radius: 16px;
+        background: linear-gradient(
+          135deg,
+          rgba(30, 41, 59, 0.65),
+          rgba(17, 24, 39, 0.55)
+        );
+        backdrop-filter: blur(8px);
+      }
+      .header h1 {
+        margin: 0 0 8px 0;
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: 0.2px;
+      }
+      .header p {
+        margin: 0;
+        color: rgba(229, 231, 235, 0.78);
+      }
+
+      /* Card becomes the fullscreen target so toolbar stays visible */
+      .card {
+        margin-top: 18px;
+        border: 1px solid var(--panel-border);
+        border-radius: 16px;
+        background: linear-gradient(
+          135deg,
+          rgba(30, 41, 59, 0.55),
+          rgba(17, 24, 39, 0.5)
+        );
+        backdrop-filter: blur(8px);
+        overflow: hidden;
+
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 12px;
+        border-bottom: 1px solid var(--panel-border);
+        background: rgba(2, 6, 23, 0.35);
+      }
+      .toolbar-left {
+        display: flex;
+        gap: 12px;
+        align-items: baseline;
+        flex-wrap: wrap;
+      }
+      .toolbar-title {
+        font-weight: 800;
+        color: rgba(229, 231, 235, 0.92);
+        font-size: 14px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .toolbar-right {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .btn,
+      select.select {
+        border: 1px solid var(--panel-border);
+        background: var(--btn);
+        color: var(--text);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        transition:
+          transform 0.08s ease,
+          background-color 0.12s ease;
+        user-select: none;
+      }
+      .btn:hover,
+      select.select:hover {
+        background: var(--btn-hover);
+      }
+      .btn:active {
+        transform: translateY(1px);
+      }
+
+      select.select {
+        appearance: none;
+        padding-right: 28px;
+        background-image:
+          linear-gradient(45deg, transparent 50%, rgba(229, 231, 235, 0.8) 50%),
+          linear-gradient(135deg, rgba(229, 231, 235, 0.8) 50%, transparent 50%);
+        background-position:
+          calc(100% - 14px) calc(50% - 2px),
+          calc(100% - 9px) calc(50% - 2px);
+        background-size:
+          5px 5px,
+          5px 5px;
+        background-repeat: no-repeat;
+      }
+
+      .mindmap-wrap {
+        position: relative;
+        min-height: 520px;
+        height: min(78vh, 820px);
+        background: linear-gradient(
+          135deg,
+          rgba(2, 6, 23, 0.25),
+          rgba(2, 6, 23, 0.55)
+        );
+      }
+
+      /* crucial: SVG must have real size */
+      #mindmap {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .loading {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: rgba(229, 231, 235, 0.82);
+        font-weight: 800;
+        letter-spacing: 0.2px;
+      }
+
+      /* Fullscreen: target the card so toolbar remains available */
+      .card:fullscreen {
+        width: 100vw;
+        height: 100vh;
+        border-radius: 0;
+        border: none;
+        margin: 0;
+        background: #05070c;
+      }
+      .card:fullscreen .mindmap-wrap {
+        height: 100%;
+        min-height: 0;
+        background: #05070c;
+      }
+
+      /* Page theme (light) */
+      html.light {
+        --bg: #f6f7fb;
+        --panel: rgba(255, 255, 255, 0.75);
+        --panel-border: rgba(15, 23, 42, 0.12);
+        --text: #0f172a;
+        --btn: rgba(255, 255, 255, 0.92);
+        --btn-hover: rgba(241, 245, 249, 0.98);
+        --accent: #2563eb;
+        --muted: rgba(15, 23, 42, 0.62);
+      }
+      html.light body {
+        background: radial-gradient(
+          1200px 600px at 10% 10%,
+          #ffffff 0%,
+          #f6f7fb 55%,
+          #eef2ff 100%
+        );
+      }
+
+      /* Markmap coloring + node themes */
+      /* Base */
+      #mindmap text,
+      #mindmap tspan {
+        font-family: var(--mm-font) !important;
+        font-weight: 500 !important;
+        font-size: 14px !important;
+      }
+
+      /* Dark / light map mode */
+      .markmap-dark #mindmap text,
+      .markmap-dark #mindmap tspan {
+        fill: #e5e7eb !important;
+      }
+      .markmap-dark #mindmap path {
+        stroke: rgba(148, 163, 184, 0.55) !important;
+      }
+
+      .markmap-light #mindmap text,
+      .markmap-light #mindmap tspan {
+        fill: #0f172a !important;
+      }
+      .markmap-light #mindmap path {
+        stroke: rgba(15, 23, 42, 0.25) !important;
+      }
+
+      /* Node theme: CLASSIC */
+      html.node-classic #mindmap circle {
+        fill: var(--accent) !important;
+        stroke: rgba(255, 255, 255, 0.82) !important;
+        stroke-width: 1.6px !important;
+      }
+
+      /* Node theme: SOFT (plus doux, plus lisible) */
+      html.node-soft #mindmap circle {
+        fill: rgba(96, 165, 250, 0.95) !important;
+        stroke: rgba(255, 255, 255, 0.9) !important;
+        stroke-width: 2px !important;
+        filter: drop-shadow(0 2px 10px rgba(96, 165, 250, 0.25));
+      }
+      html.node-soft #mindmap path {
+        stroke-width: 2.2px !important;
+      }
+      html.node-soft #mindmap text,
+      html.node-soft #mindmap tspan {
+        font-weight: 700 !important;
+      }
+
+      /* Node theme: NEON (avant-gardiste mais clean) */
+      html.node-neon #mindmap circle {
+        fill: rgba(96, 165, 250, 1) !important;
+        stroke: rgba(96, 165, 250, 0.55) !important;
+        stroke-width: 6px !important; /* “halo” */
+        paint-order: stroke fill;
+        filter: drop-shadow(0 0 10px rgba(96, 165, 250, 0.35));
+      }
+      html.node-neon #mindmap path {
+        stroke: rgba(96, 165, 250, 0.35) !important;
+        stroke-width: 2.4px !important;
+      }
+
+      @media (max-width: 720px) {
+        .container {
+          padding: 12px;
+        }
+        .mindmap-wrap {
+          min-height: 460px;
+          height: 72vh;
+        }
+        .btn,
+        select.select {
+          padding: 10px 10px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Freya — Architecture Mindmap</h1>
+        <p>
+          Drag = déplacer • Molette = zoom • Clic sur un nœud = plier/déplier
+        </p>
+      </div>
+
+      <div class="card" id="card">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div class="toolbar-title">Mindmap interactif</div>
+            <div class="hint">
+              Nœuds repliés par défaut • Fit auto sur resize/fullscreen
+            </div>
+          </div>
+
+          <div class="toolbar-right">
+            <select class="select" id="selectFont" title="Police du mindmap">
+              <option value="inter">Police: Inter</option>
+              <option value="system">Police: System</option>
+              <option value="mono">Police: JetBrains Mono</option>
+            </select>
+
+            <select class="select" id="selectNodeTheme" title="Style des nœuds">
+              <option value="classic">Nodes: Classic</option>
+              <option value="soft">Nodes: Soft</option>
+              <option value="neon">Nodes: Neon</option>
+            </select>
+
+            <button
+              class="btn"
+              id="btnTheme"
+              type="button"
+              title="Thème clair/sombre"
+            >
+              Thème
+            </button>
+            <button
+              class="btn"
+              id="btnFit"
+              type="button"
+              title="Recentrer / ajuster"
+            >
+              Fit
+            </button>
+            <button
+              class="btn"
+              id="btnFullscreen"
+              type="button"
+              title="Plein écran"
+            >
+              Plein écran
+            </button>
+          </div>
+        </div>
+
+        <div class="mindmap-wrap" id="mindmapWrap">
+          <div class="loading" id="loading">Chargement du mindmap…</div>
+          <svg
+            id="mindmap"
+            role="img"
+            aria-label="Freya architecture mindmap"
+          ></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Deps -->
+    <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markmap-view@0.18.12/dist/browser/index.js"></script>
+
+    <script>
+      const mindmapDataRaw = {
+        content: "Freya Architecture Evolution",
+        children: [
+          {
+            content: "Versions",
+            children: [
+              {
+                content:
+                  "v0.1.0 — Initial Release (31ab3ab) — BMAD Multi-Agent Orchestrator Foundation",
+                children: [
+                  {
+                    content: "🏗️ Core Architecture Establishment",
+                    children: [
+                      {
+                        content:
+                          "🤖 BMAD (Multi-Agent Decision) framework implementation",
+                      },
+                      {
+                        content:
+                          "🖥️ Text-based User Interface (TUI) using Textual library",
+                      },
+                      {
+                        content:
+                          "💻 Command Line Interface (CLI) with rich argument parsing",
+                      },
+                      {
+                        content:
+                          "🎯 Agent orchestration system with modular design",
+                      },
+                      {
+                        content:
+                          "📊 Benchmarking infrastructure for performance evaluation",
+                      },
+                    ],
+                  },
+                  {
+                    content: "🔧 Technical Implementation Details",
+                    children: [
+                      {
+                        content: "🐍 Python Core",
+                        children: [
+                          {
+                            content:
+                              "📦 FastAPI backend server with async support",
+                          },
+                          {
+                            content:
+                              "🗂️ Modular agent system with plugin architecture",
+                          },
+                          { content: "⚡ Concurrent processing with asyncio" },
+                          {
+                            content:
+                              "🔌 WebSocket communication for real-time updates",
+                          },
+                        ],
+                      },
+                      {
+                        content: "🖥️ TUI Implementation",
+                        children: [
+                          {
+                            content:
+                              "📚 Textual library for terminal UI components",
+                          },
+                          {
+                            content:
+                              "🎨 Rich formatting with colors and styles",
+                          },
+                          {
+                            content:
+                              "⌨️ Keyboard navigation and input handling",
+                          },
+                          { content: "📊 Real-time data visualization" },
+                        ],
+                      },
+                      {
+                        content: "🛠️ Development Tools",
+                        children: [
+                          { content: "📝 Poetry for dependency management" },
+                          {
+                            content: "🔧 Ruff for code linting and formatting",
+                          },
+                          { content: "📋 Pytest for comprehensive testing" },
+                          {
+                            content:
+                              "📊 Coverage.py for test coverage analysis",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    content: "📁 Source Code Structure",
+                    children: [
+                      {
+                        content: "🏗️ Project Layout",
+                        children: [
+                          {
+                            content: "📂 src/freya/ - Main application package",
+                          },
+                          {
+                            content:
+                              "🤖 src/freya/agents/ - Agent implementations",
+                          },
+                          {
+                            content:
+                              "🖥️ src/freya/tui/ - Terminal user interface",
+                          },
+                          {
+                            content:
+                              "💻 src/freya/cli/ - Command line interface",
+                          },
+                          {
+                            content:
+                              "📊 src/freya/benchmarks/ - Performance testing",
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔧 Key Files Created",
+                        children: [
+                          {
+                            content:
+                              "🚀 freya.ps1 - PowerShell launcher script",
+                          },
+                          {
+                            content:
+                              "📋 pyproject.toml - Project configuration",
+                          },
+                          { content: "📖 README.md - Project documentation" },
+                          {
+                            content:
+                              "⚙️ src/freya/config.py - Configuration management",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.1.0",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "🏗️ Core Framework",
+                            children: [
+                              {
+                                content:
+                                  "🤖 BMAD multi-agent orchestrator system",
+                              },
+                              { content: "🖥️ Textual-based TUI interface" },
+                              { content: "💻 CLI with argument parsing" },
+                              { content: "🎯 Modular agent architecture" },
+                              { content: "📊 Benchmarking infrastructure" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.2.0 — README Updates & Tooling (6d204a9) — Pre-Release Setup",
+                children: [
+                  {
+                    content: "� Initial Tooling Setup",
+                    children: [
+                      { content: "🛠️ Shell tools integration and utilities" },
+                      { content: "🌐 Web watch functionality for monitoring" },
+                      {
+                        content:
+                          "📖 Comprehensive README documentation updates",
+                      },
+                      {
+                        content: "⚙️ Configuration enhancements and validation",
+                      },
+                      { content: "🔧 CLI tooling improvements" },
+                    ],
+                  },
+                  {
+                    content: "📋 Documentation Enhancements",
+                    children: [
+                      {
+                        content:
+                          "📖 README.md structure and content improvements",
+                      },
+                      { content: "🛠️ Tooling documentation and setup guides" },
+                      { content: "⚙️ Configuration documentation updates" },
+                      { content: "🔧 CLI command documentation" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.2.0",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "🛠️ Tools Module",
+                            children: [
+                              {
+                                content:
+                                  "🖥️ Shell utilities and command execution",
+                              },
+                              {
+                                content:
+                                  "🌐 Web monitoring and watch capabilities",
+                              },
+                              { content: "🔧 System tooling integration" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📖 Documentation",
+                            children: [
+                              { content: "📋 README.md comprehensive updates" },
+                              { content: "⚙️ Configuration documentation" },
+                              { content: "🛠️ Tooling setup guides" },
+                            ],
+                          },
+                          {
+                            content: "💻 CLI Interface",
+                            children: [
+                              { content: "🔧 Command enhancements" },
+                              { content: "📖 Help documentation improvements" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.3.0 — Architecture Section (c65001e) — Documentation Foundation",
+                children: [
+                  {
+                    content: "📊 Architecture Documentation",
+                    children: [
+                      { content: "🏗️ Project structure documentation" },
+                      { content: "📋 Architecture section added to README" },
+                      {
+                        content: "🔧 System organization and design principles",
+                      },
+                      {
+                        content: "📖 Comprehensive documentation enhancements",
+                      },
+                    ],
+                  },
+                  {
+                    content: "📋 Documentation Structure",
+                    children: [
+                      { content: "🏗️ Architecture overview and design" },
+                      { content: "📁 Project layout and organization" },
+                      { content: "🔧 System components documentation" },
+                      { content: "📖 README structure improvements" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.3.0",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📖 Documentation",
+                            children: [
+                              { content: "🏗️ Architecture section added" },
+                              { content: "📋 Project structure documented" },
+                              { content: "🔧 System organization detailed" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.4.0 — ASCII Architecture Diagram (c96f52c) — Visual System Design",
+                children: [
+                  {
+                    content: "� Visual Architecture Design",
+                    children: [
+                      { content: "📐 ASCII diagram redesign and improvement" },
+                      {
+                        content:
+                          "🔧 Clean alignment system for better readability",
+                      },
+                      {
+                        content:
+                          "📊 Enhanced visual representation of system components",
+                      },
+                      {
+                        content:
+                          "🎯 Clear component relationships and data flow",
+                      },
+                    ],
+                  },
+                  {
+                    content: "📋 Documentation Visualization",
+                    children: [
+                      {
+                        content:
+                          "🎨 Improved ASCII art for architecture diagrams",
+                      },
+                      { content: "📐 Better alignment and formatting" },
+                      { content: "📊 Clear system visualization" },
+                      { content: "📖 Enhanced documentation clarity" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.4.0",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📖 Documentation",
+                            children: [
+                              {
+                                content:
+                                  "🎨 ASCII architecture diagram redesign",
+                              },
+                              { content: "📐 Clean and aligned visual design" },
+                              { content: "📊 Improved system representation" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.5.0 — English README & Language Buttons (301fef6) — Internationalization",
+                children: [
+                  {
+                    content: "🌐 Multi-Language Support",
+                    children: [
+                      { content: "🇺🇸 English README version created" },
+                      { content: "🔄 Language selection buttons implemented" },
+                      { content: "📖 Bilingual documentation framework" },
+                      { content: "🌍 International accessibility features" },
+                    ],
+                  },
+                  {
+                    content: "📋 Documentation Enhancement",
+                    children: [
+                      { content: "🇺🇸 English documentation completeness" },
+                      { content: "🔄 Language switching capabilities" },
+                      { content: "📖 Multi-language user experience" },
+                      { content: "🌐 International user support" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.5.0",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "🇫🇷 French Documentation",
+                            children: [
+                              { content: "📖 README.fr.md created" },
+                              {
+                                content: "🌐 Multi-language support initiated",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📖 Documentation",
+                            children: [
+                              { content: "🇺🇸 English README version added" },
+                              {
+                                content:
+                                  "🔄 Language selection buttons integrated",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.6.0 — LLM Model Badges (529619f) — Model Compatibility Display",
+                children: [
+                  {
+                    content: "🤖 LLM Integration Enhancement",
+                    children: [
+                      {
+                        content: "🏷️ Model compatibility badges implementation",
+                      },
+                      { content: "📊 Supported LLM models display" },
+                      { content: "🔧 Integration status indicators" },
+                      { content: "📋 Feature compatibility visibility" },
+                    ],
+                  },
+                  {
+                    content: "📋 Documentation Updates",
+                    children: [
+                      { content: "🏷️ LLM model badges added to documentation" },
+                      { content: "📊 Supported models clearly documented" },
+                      { content: "🔧 Integration features highlighted" },
+                      { content: "📖 User-friendly model information" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.6.0",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📖 Documentation",
+                            children: [
+                              {
+                                content:
+                                  "🏷️ LLM model compatibility badges added",
+                              },
+                              {
+                                content:
+                                  "📊 Supported models documentation enhanced",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.7.0 — Multi-Agent Chat & Autonomy (32d6519) — BMAD Pipeline v2.4",
+                children: [
+                  {
+                    content: "📁 Project Structure",
+                    children: [
+                      { content: "🐍 Python 3.11+ Core Runtime" },
+                      {
+                        content:
+                          "📦 Dependencies: pydantic, rich, textual, aiohttp, websockets",
+                      },
+                      { content: "🏗️ BMAD Methodology Integration" },
+                      { content: "🤖 Ollama + OpenAI Compatible APIs" },
+                      { content: "🌐 WebSocket Real-time Communication" },
+                      { content: "💾 Enhanced Persistence & State Management" },
+                    ],
+                  },
+                  {
+                    content: "🔗 System Architecture",
+                    children: [
+                      {
+                        content: "🎯 Core Components",
+                        children: [
+                          {
+                            content:
+                              "🧠 Orchestrator: BMAD Cycle avec auto-healing",
+                          },
+                          {
+                            content:
+                              "🔀 Router: Hybrid routing avec feedback loops",
+                          },
+                          {
+                            content:
+                              "🤖 Agents: 7 agents spécialisés + QA feedback",
+                          },
+                          {
+                            content:
+                              "🌐 API Server: REST + WebSocket endpoints",
+                          },
+                          {
+                            content:
+                              "💬 Chat System: Multi-agent conversations",
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Autonomy Mode v2.4",
+                        children: [
+                          {
+                            content:
+                              "🔁 Self-healing pipeline avec retry logic",
+                          },
+                          {
+                            content: "🔄 QA→Dev feedback loop automatique",
+                          },
+                          {
+                            content:
+                              "📊 Configurable max_retries & max_qa_cycles",
+                          },
+                          {
+                            content: "📡 WebSocket progress broadcasting",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    content: "⚡ Pipeline Architecture",
+                    children: [
+                      {
+                        content: "🔄 BMAD Cycle Enhancements",
+                        children: [
+                          { content: "🔁 Auto-healing avec retry logic" },
+                          { content: "🔄 QA→Dev feedback loop" },
+                          { content: "📊 Métriques de succès/réussite" },
+                          { content: "⏱️ Timeouts configurables" },
+                        ],
+                      },
+                      {
+                        content: "💬 Multi-Agent Chat System",
+                        children: [
+                          { content: "📝 Collapsible agent responses" },
+                          { content: "🎯 Synthesis message prominent" },
+                          { content: "👥 Agent role differentiation" },
+                          { content: "❌ Error handling amélioré" },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    content: "🖥️ UI Architecture",
+                    children: [
+                      {
+                        content: "🌐 Web Interface v2.4",
+                        children: [
+                          { content: "💬 Enhanced chat avec agent responses" },
+                          { content: "🎛️ Autonomy mode controls" },
+                          { content: "📁 Improved file management" },
+                          { content: "📊 Real-time progress display" },
+                        ],
+                      },
+                      {
+                        content: "📟 CLI/TUI Updates",
+                        children: [
+                          { content: "🔧 Autonomy mode commands" },
+                          { content: "📊 Enhanced logging output" },
+                          { content: "⚙️ Configuration management" },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.7.0",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "🌐 WebSocket Server",
+                            children: [
+                              {
+                                content:
+                                  "📡 Real-time communication pour autonomy mode",
+                              },
+                              {
+                                content: "📊 Progress broadcasting aux clients",
+                              },
+                              {
+                                content:
+                                  "🔄 Live updates pendant l'exécution BMAD",
+                              },
+                            ],
+                          },
+                          {
+                            content: "🔄 Autonomy Manager",
+                            children: [
+                              {
+                                content: "🎯 Gestion complète du mode autonome",
+                              },
+                              { content: "🔁 Self-healing pipeline logic" },
+                              { content: "⏱️ Retry mechanisms configurables" },
+                            ],
+                          },
+                          {
+                            content: "💬 Chat Enhancement System",
+                            children: [
+                              {
+                                content:
+                                  "📝 Agent response collapsing/expanding",
+                              },
+                              { content: "🎯 Synthesis message highlighting" },
+                              {
+                                content: "👥 Multi-agent conversation tracking",
+                              },
+                            ],
+                          },
+                          {
+                            content: "📊 Metrics & Monitoring v2.4",
+                            children: [
+                              { content: "📈 Success/failure rate tracking" },
+                              { content: "⏱️ Execution time monitoring" },
+                              { content: "🔄 Pipeline health metrics" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🧠 Orchestrator Enhancement",
+                            children: [
+                              {
+                                content:
+                                  "➕ Auto-healing capabilities ajoutées",
+                              },
+                              { content: "🔄 QA→Dev feedback loop intégré" },
+                              { content: "⚙️ Configurable retry parameters" },
+                            ],
+                          },
+                          {
+                            content: "🤖 QA Agent Updates",
+                            children: [
+                              { content: "🔄 Feedback loop vers Dev agent" },
+                              { content: "📊 Quality metrics améliorées" },
+                              { content: "🔁 Multiple validation cycles" },
+                            ],
+                          },
+                          {
+                            content: "💻 Dev Agent Improvements",
+                            children: [
+                              { content: "📥 QA feedback processing" },
+                              { content: "🔧 Automatic issue fixing" },
+                              { content: "📊 Code quality validation" },
+                            ],
+                          },
+                          {
+                            content: "🌐 API Endpoints Extended",
+                            children: [
+                              { content: "➕ /bmad/autonomy/* endpoints" },
+                              { content: "📡 WebSocket integration" },
+                              { content: "📊 Status monitoring APIs" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🗑️ Modules Effacés",
+                        children: [
+                          {
+                            content:
+                              "❌ Aucun module supprimé dans cette version",
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Abandonnés/Remplacés",
+                        children: [
+                          {
+                            content: "📁 File Deletion Logic",
+                            children: [
+                              {
+                                content:
+                                  "🔄 Ancienne logique remplacée par version améliorée",
+                              },
+                              {
+                                content:
+                                  "✅ Better error handling & verification",
+                              },
+                              { content: "📊 Detailed logging ajouté" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.8.0 — UX Improvements & Persistence (dda4e14) — Enhanced User Experience",
+                children: [
+                  {
+                    content: "📁 Project Structure",
+                    children: [
+                      { content: "🐍 Python 3.11+ Core Runtime" },
+                      {
+                        content:
+                          "📦 Dependencies: pydantic, rich, textual, aiohttp, websockets",
+                      },
+                      { content: "🏗️ BMAD Methodology Integration" },
+                      { content: "💾 Enhanced Local Storage & Persistence" },
+                      { content: "⚡ Real-time UI Updates" },
+                    ],
+                  },
+                  {
+                    content: "🔗 System Architecture",
+                    children: [
+                      {
+                        content: "🎯 Core Components (Unchanged from v0.7.0)",
+                        children: [
+                          {
+                            content:
+                              "🧠 Orchestrator: BMAD Cycle avec auto-healing",
+                          },
+                          {
+                            content:
+                              "🔀 Router: Hybrid routing avec feedback loops",
+                          },
+                          {
+                            content:
+                              "🤖 Agents: 7 agents spécialisés + QA feedback",
+                          },
+                          {
+                            content:
+                              "🌐 API Server: REST + WebSocket endpoints",
+                          },
+                          {
+                            content:
+                              "💬 Chat System: Multi-agent conversations",
+                          },
+                        ],
+                      },
+                      {
+                        content: "💾 Persistence Layer v0.8.0",
+                        children: [
+                          { content: "💾 localStorage pour chat history" },
+                          { content: "📊 Settings persistence entre sessions" },
+                          { content: "🔄 Project state recovery" },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    content: "⚡ Pipeline Architecture",
+                    children: [
+                      { content: "🔄 BMAD Cycle (Unchanged from v0.7.0)" },
+                      { content: "💬 Chat System (Unchanged from v0.7.0)" },
+                    ],
+                  },
+                  {
+                    content: "🖥️ UI Architecture",
+                    children: [
+                      {
+                        content: "🌐 Web Interface v0.8.0",
+                        children: [
+                          {
+                            content: "📊 BenchPage Enhancements",
+                            children: [
+                              {
+                                content:
+                                  "⚡ Live results display pendant benchmark",
+                              },
+                              {
+                                content:
+                                  "🏆 Highest result shown immédiatement",
+                              },
+                              {
+                                content:
+                                  "📅 Timestamps pour résultats intermédiaires",
+                              },
+                              {
+                                content: "🔄 Best model tracking en temps réel",
+                              },
+                            ],
+                          },
+                          {
+                            content: "💬 BMADPage Improvements",
+                            children: [
+                              { content: "💾 Chat history persistence" },
+                              {
+                                content:
+                                  "🔄 Project switching avec history loading",
+                              },
+                              { content: "💡 Quick suggestion buttons" },
+                              { content: "📝 Clickable suggestions injection" },
+                            ],
+                          },
+                          {
+                            content: "⚙️ SettingsPage Reorganization",
+                            children: [
+                              {
+                                content:
+                                  "🔀 Hybrid Routing déplacé vers Providers tab",
+                              },
+                              { content: "📋 Tab reordering optimisé" },
+                              { content: "💾 Provider configuration tracking" },
+                              { content: "✅ Improved save feedback" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.8.0",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "💾 Persistence Manager",
+                            children: [
+                              {
+                                content: "💾 localStorage integration complète",
+                              },
+                              { content: "🔄 Session state recovery" },
+                              {
+                                content: "📊 Settings persistence automatique",
+                              },
+                            ],
+                          },
+                          {
+                            content: "⚡ Real-time Results Engine",
+                            children: [
+                              {
+                                content: "📊 Live benchmark results streaming",
+                              },
+                              {
+                                content: "⏱️ Timestamp tracking pour métriques",
+                              },
+                              { content: "🏆 Best result highlighting" },
+                            ],
+                          },
+                          {
+                            content: "💡 Suggestion System",
+                            children: [
+                              { content: "🔍 Analyst response parsing" },
+                              { content: "💬 Quick suggestion buttons" },
+                              { content: "📝 One-click suggestion injection" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📊 BenchPage Component",
+                            children: [
+                              { content: "➕ Live results feed ajouté" },
+                              {
+                                content:
+                                  "⚡ Real-time updates pendant benchmark",
+                              },
+                              { content: "🏆 Immediate best result display" },
+                            ],
+                          },
+                          {
+                            content: "💬 BMADPage Component",
+                            children: [
+                              { content: "💾 Chat history persistence ajouté" },
+                              { content: "🔄 Project switching amélioré" },
+                              { content: "💡 Suggestion system intégré" },
+                            ],
+                          },
+                          {
+                            content: "⚙️ SettingsPage Component",
+                            children: [
+                              { content: "🔀 Tab reorganization complète" },
+                              { content: "📋 Improved navigation flow" },
+                              { content: "💾 Configuration state tracking" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🗑️ Modules Effacés",
+                        children: [
+                          {
+                            content:
+                              "❌ Aucun module supprimé dans cette version",
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Abandonnés/Remplacés",
+                        children: [
+                          {
+                            content: "⚙️ Settings Organization",
+                            children: [
+                              {
+                                content:
+                                  "🔄 Old tab layout remplacé par optimized flow",
+                              },
+                              {
+                                content:
+                                  "📍 Hybrid Routing déplacé vers Providers",
+                              },
+                              {
+                                content:
+                                  "✅ Alert-based feedback remplacé par notifications",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.9.0 — Research Mode & Enhanced UX (1b3b0a7) — 4-Phase Research Workflow",
+                children: [
+                  {
+                    content: "📁 Project Structure",
+                    children: [
+                      { content: "🐍 Python 3.11+ Core Runtime" },
+                      {
+                        content:
+                          "📦 Dependencies: pydantic, rich, textual, aiohttp, websockets",
+                      },
+                      { content: "🏗️ BMAD Methodology Integration" },
+                      { content: "🔍 Research Mode 4-Phase Workflow" },
+                      { content: "💾 Global State Management & Persistence" },
+                      { content: "⚡ Enhanced Real-time UI Updates" },
+                    ],
+                  },
+                  {
+                    content: "🔗 System Architecture",
+                    children: [
+                      {
+                        content: "🎯 Core Components (Enhanced from v0.8.0)",
+                        children: [
+                          {
+                            content:
+                              "🧠 Orchestrator: BMAD Cycle avec auto-healing",
+                          },
+                          {
+                            content:
+                              "🔀 Router: Hybrid routing avec feedback loops",
+                          },
+                          {
+                            content:
+                              "🤖 Agents: 7 agents spécialisés + QA feedback",
+                          },
+                          {
+                            content:
+                              "🌐 API Server: REST + WebSocket endpoints",
+                          },
+                          {
+                            content:
+                              "💬 Chat System: Multi-agent conversations",
+                          },
+                          { content: "🔍 Research Engine: 4-phase workflow" },
+                        ],
+                      },
+                      {
+                        content: "🔍 Research Mode Architecture v0.9.0",
+                        children: [
+                          {
+                            content: "🌐 Phase 1: Internet Search",
+                            children: [
+                              {
+                                content:
+                                  "🔍 Web research & information gathering",
+                              },
+                              {
+                                content:
+                                  "📊 Data collection from multiple sources",
+                              },
+                            ],
+                          },
+                          {
+                            content: "📈 Phase 2: Market Analysis",
+                            children: [
+                              {
+                                content:
+                                  "📊 Competitive analysis & market research",
+                              },
+                              { content: "📈 Trend identification & insights" },
+                            ],
+                          },
+                          {
+                            content: "📋 Phase 3: BMAD Brief Generation",
+                            children: [
+                              {
+                                content: "📝 Structured requirements document",
+                              },
+                              { content: "🎯 Business case development" },
+                            ],
+                          },
+                          {
+                            content: "🚀 Phase 4: Launch BMAD Pipeline",
+                            children: [
+                              {
+                                content:
+                                  "🔄 Automatic transition to development",
+                              },
+                              { content: "📊 Research data integration" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "💾 Global State Management",
+                        children: [
+                          { content: "🔄 Cross-page state synchronization" },
+                          { content: "💾 Persistent benchmark data caching" },
+                          { content: "📊 Research state tracking" },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    content: "⚡ Pipeline Architecture",
+                    children: [
+                      { content: "🔄 BMAD Cycle (Enhanced visual feedback)" },
+                      { content: "💬 Chat System (Per-model status updates)" },
+                      {
+                        content: "🔍 Research Pipeline Integration",
+                        children: [
+                          { content: "🔗 Research → BMAD seamless transition" },
+                          {
+                            content:
+                              "📊 Research data feeding into development",
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    content: "🖥️ UI Architecture",
+                    children: [
+                      {
+                        content: "🌐 Web Interface v0.9.0",
+                        children: [
+                          {
+                            content: "🔍 Research Mode Interface",
+                            children: [
+                              { content: "📋 4-phase workflow visualization" },
+                              {
+                                content:
+                                  "📊 Progress indicators & phase tracking",
+                              },
+                              { content: "🔄 Cross-page state integration" },
+                            ],
+                          },
+                          {
+                            content: "💬 ChatPage Enhancements",
+                            children: [
+                              { content: "🧠 Enhanced thinking indicators" },
+                              {
+                                content: "📊 Per-model status updates (✅🧠⏳)",
+                              },
+                              { content: "🎯 Better synthesis feedback" },
+                              { content: "❌ Improved error handling" },
+                            ],
+                          },
+                          {
+                            content: "📊 BenchPage Improvements",
+                            children: [
+                              { content: "💾 Benchmark data persistence" },
+                              { content: "🔄 Tab switching without data loss" },
+                              { content: "📊 Cached data recovery" },
+                            ],
+                          },
+                          {
+                            content: "🎨 BMADPage Studio UX v2.5",
+                            children: [
+                              {
+                                content:
+                                  "📱 Collapsible/expandable pipeline view",
+                              },
+                              { content: "🔄 Auto-expand running agent" },
+                              { content: "🧠 Visual thinking indicators" },
+                              { content: "📊 Gradient progress bar" },
+                              { content: "📱 Responsive design improvements" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.9.0",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "🔍 Research Engine",
+                            children: [
+                              {
+                                content:
+                                  "🌐 4-phase research workflow implementation",
+                              },
+                              {
+                                content: "🔍 Internet search & market analysis",
+                              },
+                              {
+                                content: "📋 BMAD brief generation automatique",
+                              },
+                              { content: "🚀 Seamless pipeline integration" },
+                            ],
+                          },
+                          {
+                            content: "💾 Global State Manager",
+                            children: [
+                              {
+                                content:
+                                  "🔄 Cross-component state synchronization",
+                              },
+                              {
+                                content:
+                                  "💾 Persistent data caching (appStore)",
+                              },
+                              {
+                                content:
+                                  "📊 Research & benchmark state tracking",
+                              },
+                            ],
+                          },
+                          {
+                            content: "📊 Enhanced Status System",
+                            children: [
+                              { content: "📊 Per-model processing status" },
+                              { content: "🧠 Visual thinking indicators" },
+                              { content: "✅ Completion state tracking" },
+                            ],
+                          },
+                          {
+                            content: "🎨 Pipeline Visualizer",
+                            children: [
+                              { content: "📱 Collapsible pipeline view" },
+                              { content: "🔄 Auto-expansion logic" },
+                              { content: "📊 Gradient progress indicators" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "💬 ChatPage Component",
+                            children: [
+                              { content: "➕ Research mode selector ajouté" },
+                              { content: "🧠 Enhanced thinking indicators" },
+                              { content: "📊 Multi-model status tracking" },
+                            ],
+                          },
+                          {
+                            content: "📊 BenchPage Component",
+                            children: [
+                              { content: "💾 Data persistence ajouté" },
+                              { content: "🔄 Tab switching amélioré" },
+                              { content: "📊 Cached data recovery" },
+                            ],
+                          },
+                          {
+                            content: "🎨 BMADPage Component",
+                            children: [
+                              { content: "📱 Compact icons mode ajouté" },
+                              { content: "🔄 Auto-expand functionality" },
+                              { content: "🧠 Current agent highlighting" },
+                            ],
+                          },
+                          {
+                            content: "⚙️ SettingsPage Component",
+                            children: [
+                              { content: "🔍 Research mode integration" },
+                              { content: "📊 State management updates" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🗑️ Modules Effacés",
+                        children: [
+                          {
+                            content:
+                              "❌ Aucun module supprimé dans cette version",
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Abandonnés/Remplacés",
+                        children: [
+                          {
+                            content: "💬 Basic Chat Status",
+                            children: [
+                              {
+                                content:
+                                  "🔄 Simple status remplacé par per-model tracking",
+                              },
+                              { content: "📊 Enhanced visual feedback system" },
+                              { content: "🧠 Thinking indicators ajoutés" },
+                            ],
+                          },
+                          {
+                            content: "📊 Benchmark Data Handling",
+                            children: [
+                              {
+                                content:
+                                  "🔄 Tab reset logic remplacée par persistence",
+                              },
+                              { content: "💾 Global store caching ajouté" },
+                              { content: "📊 Automatic data recovery" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.10.0 — Research Modes & Chat Exchange (59e299b) — Assisted & Autonomous Research",
+                children: [
+                  {
+                    content: "🔍 Research Mode Extensions",
+                    children: [
+                      {
+                        content:
+                          "👥 Assisted mode: User-driven idea exploration",
+                      },
+                      {
+                        content:
+                          "🤖 Autonomous mode: Auto-search & pipeline loop",
+                      },
+                      {
+                        content:
+                          "💬 Chat Exchange: Multi-user conversation support",
+                      },
+                      { content: "🎨 Enhanced UX across all components" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.10.0",
+                    children: [
+                      {
+                        content: "➕ Research Mode Variants",
+                        children: [
+                          { content: "👥 Assisted research workflow" },
+                          { content: "🤖 Autonomous research pipeline" },
+                          { content: "🔄 Enhanced conversation exchange" },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.11.0 — CyberAgent & External Benchmarks (aa449c9) — Advanced Benchmarking Suite",
+                children: [
+                  {
+                    content: "🤖 CyberAgent Integration",
+                    children: [
+                      { content: "🧠 Advanced agent orchestration" },
+                      { content: "🎯 Best agent selection algorithms" },
+                      { content: "📊 External benchmark comparisons" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.11.0",
+                    children: [
+                      {
+                        content: "➕ CyberAgent System",
+                        children: [
+                          { content: "🧠 Advanced multi-agent coordination" },
+                          { content: "📊 External benchmarking capabilities" },
+                          { content: "🎯 Intelligent agent selection" },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.12.0 — Initial TUI Release — Text-Based User Interface",
+                children: [
+                  {
+                    content: "🖥️ TUI Interface",
+                    children: [
+                      {
+                        content:
+                          "📟 Interface utilisateur textuelle avec Textual",
+                      },
+                      {
+                        content:
+                          "🎛️ Console interactive pour toutes les fonctionnalités",
+                      },
+                      { content: "📊 Affichage en temps réel des opérations" },
+                      { content: "⌨️ Contrôles clavier intuitifs" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.12.0",
+                    children: [
+                      {
+                        content: "➕ TUI System",
+                        children: [
+                          { content: "🖥️ Textual-based console interface" },
+                          { content: "📟 Interactive terminal UI" },
+                          { content: "⌨️ Keyboard-driven controls" },
+                          { content: "📊 Real-time operation display" },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.13.0 — Enhanced TUI & Patch Notes (19a9602) — Improved Text Interface",
+                children: [
+                  {
+                    content: "📋 Patch Notes System",
+                    children: [
+                      {
+                        content: "📝 Documentation des changements par version",
+                      },
+                      { content: "📊 Suivi des améliorations et corrections" },
+                      { content: "🔄 Version management amélioré" },
+                      { content: "📖 Documentation utilisateur étendue" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.13.0",
+                    children: [
+                      {
+                        content: "➕ Patch Notes",
+                        children: [
+                          { content: "📋 Version change documentation" },
+                          { content: "📊 Improvement tracking system" },
+                          { content: "🔄 Enhanced version management" },
+                          { content: "📖 Extended user documentation" },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.14.0 — French README Versioning (6244513) — International Documentation",
+                children: [
+                  {
+                    content: "🌐 French Documentation",
+                    children: [
+                      { content: "📝 Versioning system added" },
+                      { content: "📋 Patch notes in French" },
+                      { content: "🔄 Multi-language consistency" },
+                      { content: "📖 Complete French documentation" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.13.0.1",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🇫🇷 French README",
+                            children: [
+                              {
+                                content: "📝 Versioning and patch notes added",
+                              },
+                              { content: "📋 Complete French documentation" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.15.0 — Legacy UI Components (c736b1e) — Version 1.1 UI System",
+                children: [
+                  {
+                    content: "🖥️ Legacy Interface",
+                    children: [
+                      { content: "📋 Clipboard tools integration" },
+                      { content: "🛡️ Redaction utilities" },
+                      { content: "🔧 UI component updates" },
+                      { content: "📁 Resource organization" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.13.0.2",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "📋 Clipboard Tools",
+                            children: [
+                              { content: "✂️ Clipboard management" },
+                              { content: "🔒 Secure operations" },
+                            ],
+                          },
+                          {
+                            content: "🛡️ Redaction Tools",
+                            children: [
+                              { content: "🔒 Data protection utilities" },
+                              { content: "📝 Text sanitization" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.16.0 — Async TUI Fixes (1e79195) — Stability Improvements",
+                children: [
+                  {
+                    content: "🔄 Async Handling",
+                    children: [
+                      { content: "⚡ TUI artifacts tree reload fix" },
+                      { content: "🔧 Coroutine wrapping improvements" },
+                      { content: "📊 Stability enhancements" },
+                      { content: "📖 Documentation updates" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.13.0.3",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🖥️ TUI Interface",
+                            children: [
+                              {
+                                content: "⚡ Async handling in _refresh_tree()",
+                              },
+                              { content: "🔧 Awaitable import added" },
+                              { content: "📊 Improved stability" },
+                            ],
+                          },
+                          {
+                            content: "📖 Documentation",
+                            children: [
+                              { content: "📋 Patch notes for async fix" },
+                              { content: "📖 README updates" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.17.0 — HUD Fixes & Font Resources (48e1a53) — UI Polish & Resources",
+                children: [
+                  {
+                    content: "🎨 UI Enhancements",
+                    children: [
+                      { content: "🔤 Font resource organization" },
+                      { content: "🚀 Launch script improvements" },
+                      { content: "💾 Configuration updates" },
+                      { content: "📝 New prompt storage system" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.17.0",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "📝 Prompts Store",
+                            children: [
+                              { content: "💾 Prompt storage system" },
+                              { content: "📋 Template management" },
+                            ],
+                          },
+                          {
+                            content: "🌐 Web Search Tools",
+                            children: [
+                              { content: "🔍 Web search functionality" },
+                              { content: "📊 Data retrieval tools" },
+                            ],
+                          },
+                          {
+                            content: "🎨 TUI Styles",
+                            children: [
+                              { content: "📄 TUI cascading stylesheets" },
+                              { content: "🎨 Interface customization" },
+                            ],
+                          },
+                          {
+                            content: "🚀 Launch Scripts",
+                            children: [
+                              { content: "⚡ PowerShell launch script" },
+                              { content: "💻 CMD launch script" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🔤 Font Resources",
+                            children: [
+                              { content: "📁 Moved to resources directory" },
+                              { content: "🔤 Complete CascadiaCode suite" },
+                            ],
+                          },
+                          {
+                            content: "⚙️ Configuration",
+                            children: [
+                              { content: "🔧 Enhanced config system" },
+                              { content: "📊 Settings management" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.18.0 — TUI Enhancements & CLI Improvements (d934f77) — Advanced Text Interface",
+                children: [
+                  {
+                    content: "🖥️ TUI Advanced Features",
+                    children: [
+                      { content: "⌨️ Enhanced CLI command system" },
+                      { content: "⚙️ Improved configuration management" },
+                      { content: "🔀 Advanced routing capabilities" },
+                      { content: "📊 Better TUI interaction handling" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.18.0",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🖥️ TUI System",
+                            children: [
+                              { content: "➕ Enhanced command interface" },
+                              { content: "⚙️ Improved configuration handling" },
+                              { content: "🔀 Advanced routing integration" },
+                            ],
+                          },
+                          {
+                            content: "📟 CLI Interface",
+                            children: [
+                              { content: "🔧 Command system improvements" },
+                              { content: "📊 Better interaction management" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.19.0 — Maintenance & Documentation Updates (8d4ba74) — Code Quality Improvements",
+                children: [
+                  {
+                    content: "🛠️ Code Quality & Maintenance",
+                    children: [
+                      { content: "📝 Comprehensive documentation updates" },
+                      { content: "🔧 Code maintenance improvements" },
+                      { content: "📊 Architecture diagram enhancements" },
+                      { content: "🔄 Component organization updates" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.18.0.1",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📚 Documentation",
+                            children: [
+                              { content: "📝 README comprehensive updates" },
+                              { content: "📊 Architecture diagrams enhanced" },
+                              {
+                                content: "🔄 Component documentation improved",
+                              },
+                            ],
+                          },
+                          {
+                            content: "🛠️ Code Maintenance",
+                            children: [
+                              { content: "🔧 TODO comments added" },
+                              { content: "📋 Maintenance tracking system" },
+                              { content: "🔄 Code organization improvements" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.20.0 — Autopilot Command & README Consolidation (10e1ca6) — Automated Operations",
+                children: [
+                  {
+                    content: "🤖 Autopilot System",
+                    children: [
+                      { content: "🚀 Automated command execution" },
+                      { content: "📋 Consolidated documentation" },
+                      { content: "🔧 Streamlined user experience" },
+                      { content: "📖 Unified README structure" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.20.0",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "🤖 Autopilot Module",
+                            children: [
+                              {
+                                content:
+                                  "🚀 Automated command execution system",
+                              },
+                              { content: "⚙️ Configuration-driven operations" },
+                              { content: "📊 Status monitoring & reporting" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📖 Documentation System",
+                            children: [
+                              { content: "🔄 README consolidation" },
+                              { content: "📋 Unified documentation structure" },
+                              { content: "🌐 Multi-language support" },
+                            ],
+                          },
+                          {
+                            content: "📟 CLI Interface",
+                            children: [
+                              { content: "➕ Autopilot command integration" },
+                              { content: "🔧 Enhanced command system" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🗑️ Modules Effacés",
+                        children: [
+                          {
+                            content: "📄 README.fr.md",
+                            children: [
+                              {
+                                content: "🔄 Consolidated into unified README",
+                              },
+                              { content: "📖 Multi-language documentation" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.21.0 — French README Recreation (4fa1173) — Documentation Recovery",
+                children: [
+                  {
+                    content: "🇫🇷 French Documentation",
+                    children: [
+                      { content: "📄 README.fr.md recreation" },
+                      { content: "🔄 Documentation restoration" },
+                      { content: "🌐 Multi-language maintenance" },
+                      { content: "📖 Complete French version" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.21.0",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "🇫🇷 French README",
+                            children: [
+                              { content: "📄 README.fr.md recreated" },
+                              { content: "📖 Complete French documentation" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.18.0.0 — Version 1.1.6 Documentation Update (dee94d9) — Release Documentation",
+                children: [
+                  {
+                    content: "📋 Version Documentation",
+                    children: [
+                      { content: "🔄 README files updated to v0.18.0" },
+                      { content: "📊 Release information synchronized" },
+                      { content: "🌐 Multi-language version consistency" },
+                      { content: "📖 Documentation maintenance" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.18.0.0",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📖 README Documentation",
+                            children: [
+                              { content: "🔄 Updated to version 1.1.6" },
+                              {
+                                content: "📊 Release information synchronized",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.18.0.0.1 — CLI Architecture Diagrams (c86442b) — System Visualization",
+                children: [
+                  {
+                    content: "🏗️ Architecture Visualization",
+                    children: [
+                      { content: "📐 CLI interface in diagrams" },
+                      { content: "🔧 System architecture updates" },
+                      { content: "📊 Visual documentation enhancement" },
+                      { content: "🌐 Multi-language diagram updates" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.18.0.0.1",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🏗️ Architecture Documentation",
+                            children: [
+                              { content: "📐 CLI interface added to diagrams" },
+                              { content: "🔧 System visualization updated" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.22.0 — TUI Enhancements & Font Integration (6606f77) — Advanced Text Interface",
+                children: [
+                  {
+                    content: "🔤 Font & Display System",
+                    children: [
+                      { content: "🔤 CaskaydiaCove Nerd Font integration" },
+                      { content: "📋 Clipboard management tools" },
+                      { content: "📊 Enhanced benchmark display" },
+                      { content: "📁 Advanced artifact management" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v1.1.4",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "🔤 Font System",
+                            children: [
+                              {
+                                content:
+                                  "🔤 Complete CaskaydiaCove Nerd Font suite",
+                              },
+                              {
+                                content:
+                                  "📝 Regular, Bold, Italic, Mono variants",
+                              },
+                              {
+                                content:
+                                  "🎨 Enhanced visual display capabilities",
+                              },
+                            ],
+                          },
+                          {
+                            content: "📋 Clipboard Tools",
+                            children: [
+                              { content: "✂️ Advanced clipboard operations" },
+                              { content: "📄 Text processing utilities" },
+                              { content: "🔒 Secure data handling" },
+                            ],
+                          },
+                          {
+                            content: "🛡️ Redaction Tools",
+                            children: [
+                              { content: "🔒 Sensitive data protection" },
+                              { content: "📝 Text sanitization utilities" },
+                              { content: "🛡️ Security enhancement tools" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🖥️ TUI Interface",
+                            children: [
+                              { content: "🔤 Font integration complète" },
+                              {
+                                content: "📊 Enhanced benchmark visualization",
+                              },
+                              { content: "📁 Improved artifact management" },
+                              { content: "📋 Clipboard functionality" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.23.0 — Architecture & Documentation Updates (c4433cd) — System Organization",
+                children: [
+                  {
+                    content: "📊 System Architecture",
+                    children: [
+                      { content: "🔧 Component organization improvements" },
+                      { content: "📈 Tool integration enhancements" },
+                      { content: "🔄 Current component documentation" },
+                      { content: "📋 Architecture diagram updates" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v1.1.5",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🏗️ Architecture Documentation",
+                            children: [
+                              {
+                                content: "📊 All current components documented",
+                              },
+                              { content: "🔧 Tool integration details" },
+                              { content: "📋 Architecture diagrams updated" },
+                            ],
+                          },
+                          {
+                            content: "📁 Project Structure",
+                            children: [
+                              {
+                                content: "🔄 Component organization optimized",
+                              },
+                              { content: "📊 Tool relationships clarified" },
+                              { content: "🔧 Integration points documented" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.24.0 — Interaction Diagrams & Maintenance Comments (dc6b148) — Documentation Enhancement",
+                children: [
+                  {
+                    content: "📊 Documentation Updates",
+                    children: [
+                      { content: "🔄 Interaction overview diagrams" },
+                      { content: "📝 Maintenance comments added" },
+                      { content: "📋 Enhanced documentation structure" },
+                      { content: "🔧 System interaction clarity" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v1.1.5.1",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📖 README Documentation",
+                            children: [
+                              {
+                                content:
+                                  "📊 Interaction overview diagrams updated",
+                              },
+                              { content: "📝 Maintenance comments integrated" },
+                              {
+                                content: "🔄 Documentation structure enhanced",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.25.0 — Maintenance TODO Comments (37f47fe) — Development Planning",
+                children: [
+                  {
+                    content: "📋 Maintenance Planning",
+                    children: [
+                      { content: "📝 TODO comments in all sections" },
+                      { content: "🔧 Development roadmap integration" },
+                      { content: "📊 Maintenance tracking system" },
+                      { content: "🔄 Documentation maintenance" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v1.1.5.2",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📖 README Documentation",
+                            children: [
+                              {
+                                content:
+                                  "📝 TODO comments added to all main sections",
+                              },
+                              { content: "🔧 Maintenance planning integrated" },
+                              { content: "📋 Development roadmap documented" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.0.6 — Modern Web Interface (c7cda19) — BREAKING: TUI → React Web App",
+                children: [
+                  {
+                    content: "🌐 Architecture Révolution",
+                    children: [
+                      {
+                        content:
+                          "🔄 TUI remplacé par interface web React moderne",
+                      },
+                      { content: "🚀 FastAPI REST API + WebSocket backend" },
+                      {
+                        content:
+                          "⚛️ React 18 + TypeScript + Tailwind CSS frontend",
+                      },
+                      {
+                        content:
+                          "📱 6 pages complètes: Chat, Bench, BMAD Studio, Settings, Files, Watch",
+                      },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.0.6",
+                    children: [
+                      {
+                        content: "➕ Nouveaux Modules Ajoutés",
+                        children: [
+                          {
+                            content: "🌐 Web Server FastAPI",
+                            children: [
+                              {
+                                content:
+                                  "🚀 REST API backend avec WebSocket support",
+                              },
+                              {
+                                content:
+                                  "📡 Real-time communication infrastructure",
+                              },
+                              {
+                                content:
+                                  "🔧 API endpoints pour toutes les fonctionnalités",
+                              },
+                            ],
+                          },
+                          {
+                            content: "⚛️ React Frontend",
+                            children: [
+                              {
+                                content:
+                                  "📱 Interface utilisateur moderne et responsive",
+                              },
+                              { content: "🎨 Tailwind CSS pour le styling" },
+                              { content: "⚡ TypeScript pour la type safety" },
+                            ],
+                          },
+                          {
+                            content: "📊 6 Pages Principales",
+                            children: [
+                              { content: "💬 Chat: Multi-agent conversations" },
+                              { content: "📊 Bench: Benchmarking et tests" },
+                              {
+                                content: "🎨 BMAD Studio: Pipeline development",
+                              },
+                              { content: "⚙️ Settings: Configuration globale" },
+                              { content: "📁 Files: Gestionnaire de fichiers" },
+                              { content: "👁️ Watch: Monitoring en temps réel" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🖥️ Interface Utilisateur",
+                            children: [
+                              { content: "🔄 TUI remplacé par interface web" },
+                              { content: "📦 Nouvelle commande 'freya serve'" },
+                              {
+                                content:
+                                  "🔧 TUI devient optionnel (freya[tui])",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🗑️ Modules Abandonnés/Supprimés",
+                        children: [
+                          {
+                            content: "🖥️ Ancien TUI Textual",
+                            children: [
+                              {
+                                content:
+                                  "🔄 Remplacé par interface web moderne",
+                              },
+                              {
+                                content:
+                                  "📦 Déplacé vers dépendance optionnelle",
+                              },
+                              {
+                                content:
+                                  "⚡ Fonctionnalités préservées mais interface changée",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.0.6.1 — API Client Library (a968cf0) — WebSocket Communication",
+                children: [
+                  {
+                    content: "🔌 API Integration",
+                    children: [
+                      { content: "📡 Missing API client library added" },
+                      { content: "🔧 WebSocket endpoint support" },
+                      { content: "⚡ Real-time communication setup" },
+                      { content: "📊 Client-server architecture" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.0.6.1",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "🔌 API Client Library",
+                            children: [
+                              { content: "📡 WebSocket client implementation" },
+                              { content: "🔧 API communication utilities" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.0.6.2 — WebSocket Route Configuration (31a489d) — Server Architecture",
+                children: [
+                  {
+                    content: "🌐 Server Configuration",
+                    children: [
+                      { content: "🔌 WebSocket endpoint routing" },
+                      { content: "📁 Static file serving optimization" },
+                      { content: "⚙️ Server setup improvements" },
+                      { content: "🔧 Route configuration fixes" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.0.6.2",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🌐 Web Server",
+                            children: [
+                              {
+                                content:
+                                  "🔌 WebSocket route before static files",
+                              },
+                              {
+                                content: "📁 Static file serving configuration",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.0.6.3 — Static File Serving (81b341e) — Production Deployment",
+                children: [
+                  {
+                    content: "📁 Static Assets",
+                    children: [
+                      { content: "🔧 Static files served in debug/production" },
+                      { content: "⚙️ Environment-agnostic configuration" },
+                      { content: "📦 Deployment readiness" },
+                      { content: "🔄 Consistent file serving" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.0.6.3",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🌐 Web Server",
+                            children: [
+                              {
+                                content: "📁 Static file serving for all modes",
+                              },
+                              {
+                                content:
+                                  "⚙️ Debug and production compatibility",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.0.7 — Hybrid Routing System v2.1 (1ef7d43) — Multi-Provider LLM Routing",
+                children: [
+                  {
+                    content: "🔀 Hybrid Routing Architecture",
+                    children: [
+                      {
+                        content:
+                          "🌐 Local/Remote LLM routing avec support multi-provider",
+                      },
+                      {
+                        content:
+                          "⚖️ Load balancing intelligent entre providers",
+                      },
+                      {
+                        content: "🎯 Sélection automatique du meilleur modèle",
+                      },
+                      { content: "📊 Métriques de performance par provider" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.0.7",
+                    children: [
+                      {
+                        content: "➕ Routing System Avancé",
+                        children: [
+                          { content: "🔀 Hybrid routing local/remote" },
+                          { content: "📊 Multi-provider load balancing" },
+                          { content: "🎯 Intelligent model selection" },
+                          { content: "📈 Performance metrics tracking" },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.0.8 — Providers Dashboard & UI Fixes (28ca562) — Enhanced Provider Management",
+                children: [
+                  {
+                    content: "📊 Providers Dashboard",
+                    children: [
+                      { content: "🎛️ Interface de gestion des providers" },
+                      { content: "📈 Métriques temps réel des providers" },
+                      { content: "⚙️ Configuration avancée des routes" },
+                      { content: "🔧 Corrections UI majeures" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.0.8",
+                    children: [
+                      {
+                        content: "➕ Dashboard Providers",
+                        children: [
+                          {
+                            content: "📊 Interface de monitoring des providers",
+                          },
+                          { content: "⚙️ Gestion avancée des configurations" },
+                          { content: "🔧 Corrections UI et UX" },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.0.9 — Major UX Improvements (1af49c9) — Enhanced User Experience v2.3.0",
+                children: [
+                  {
+                    content: "🎨 UX Enhancements",
+                    children: [
+                      { content: "📱 Interface utilisateur améliorée" },
+                      { content: "⚡ Performance et responsiveness accrues" },
+                      { content: "🔧 Corrections de bugs majeurs" },
+                      { content: "📊 Meilleure gestion d'état" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.0.9",
+                    children: [
+                      {
+                        content: "🔄 UI/UX Improvements",
+                        children: [
+                          { content: "📱 Enhanced user interface design" },
+                          { content: "⚡ Performance optimizations" },
+                          { content: "🔧 Major bug fixes" },
+                          { content: "📊 State management improvements" },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.7.00 — Global Settings & Hybrid Routing UI (820d776) — Configuration Management",
+                children: [
+                  {
+                    content: "⚙️ Global Settings System",
+                    children: [
+                      { content: "🎛️ Paramètres globaux centralisés" },
+                      { content: "🔀 Interface Hybrid Routing améliorée" },
+                      { content: "🔧 Corrections providers" },
+                      { content: "💾 Configuration persistante" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.7.00",
+                    children: [
+                      {
+                        content: "➕ Global Settings",
+                        children: [
+                          {
+                            content: "⚙️ Centralized configuration management",
+                          },
+                          { content: "🔀 Enhanced hybrid routing UI" },
+                          { content: "🔧 Provider fixes and improvements" },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.7.01 — Major UX Improvements v2.3.5 (d50f460) — Final UX Polish",
+                children: [
+                  {
+                    content: "🎨 Final UX Polish",
+                    children: [
+                      { content: "✨ Améliorations UX majeures finales" },
+                      { content: "⚡ Optimisations de performance" },
+                      { content: "🔧 Corrections de bugs critiques" },
+                      { content: "📱 Responsive design improvements" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.7.01",
+                    children: [
+                      {
+                        content: "🔄 UX Final Polish",
+                        children: [
+                          { content: "✨ Major user experience improvements" },
+                          { content: "⚡ Performance optimizations" },
+                          { content: "🔧 Critical bug fixes" },
+                          { content: "📱 Responsive design enhancements" },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.7.02 — Advanced BMAD Features (572e172) — Resume, TestRunner & Real-time Logging",
+                children: [
+                  {
+                    content: "🔄 Advanced BMAD Capabilities",
+                    children: [
+                      {
+                        content:
+                          "⏯️ Resume functionality pour reprendre les pipelines interrompus",
+                      },
+                      {
+                        content:
+                          "🧪 TestRunner agent pour validation automatisée",
+                      },
+                      { content: "📝 Real-time logging pendant l'exécution" },
+                      { content: "🔁 Infinite validation loop jusqu'à succès" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.7.02",
+                    children: [
+                      {
+                        content: "➕ BMAD Enhancements",
+                        children: [
+                          {
+                            content: "⏯️ Resume System",
+                            children: [
+                              {
+                                content:
+                                  "🔄 Continuation des pipelines interrompus",
+                              },
+                              { content: "💾 State persistence pour recovery" },
+                              { content: "📊 Progress tracking avancé" },
+                            ],
+                          },
+                          {
+                            content: "🧪 TestRunner Agent",
+                            children: [
+                              { content: "✅ Automated testing integration" },
+                              { content: "🔍 Code validation automatisée" },
+                              { content: "📊 Quality assurance renforcée" },
+                            ],
+                          },
+                          {
+                            content: "📝 Real-time Logging",
+                            children: [
+                              { content: "📊 Live execution monitoring" },
+                              { content: "🔍 Detailed operation feedback" },
+                              { content: "📈 Performance metrics streaming" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.7.03 — Web Search & Cyber Watch Integration (5ac9155) — External Data & Security Monitoring",
+                children: [
+                  {
+                    content: "🌐 External Data Integration",
+                    children: [
+                      {
+                        content:
+                          "🔍 DuckDuckGo web search integration (gratuit, illimité)",
+                      },
+                      {
+                        content:
+                          "🛡️ Cyber security monitoring (CERT-FR, NVD, Exploit-DB)",
+                      },
+                      { content: "📊 GitHub security advisories (GHSA)" },
+                      { content: "🌐 Multiple fallback search providers" },
+                      { content: "📈 PacketStorm security sources" },
+                    ],
+                  },
+                  {
+                    content: "⚙️ Enhanced Settings Management",
+                    children: [
+                      { content: "🔧 Editable paths configuration" },
+                      {
+                        content:
+                          "🔑 API keys management (GitHub, GitLab, Brave, NVD, SearXNG)",
+                      },
+                      { content: "🎨 Real-time theme preview (5 thèmes)" },
+                      { content: "🔤 Font options (4 polices)" },
+                      { content: "💾 Settings persistence" },
+                    ],
+                  },
+                  {
+                    content: "👁️ Watch System Features",
+                    children: [
+                      { content: "🔄 Auto-refresh avec timestamp display" },
+                      { content: "📤 Export to JSON functionality" },
+                      {
+                        content: "⚙️ Settings panel pour sources et intervals",
+                      },
+                      { content: "📊 Enhanced security feed parsing" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.7.03",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "🔍 Web Search Engine",
+                            children: [
+                              { content: "🌐 DuckDuckGo integration gratuite" },
+                              { content: "🔄 Multiple provider fallbacks" },
+                              { content: "📝 Context-aware search parameters" },
+                              { content: "⚡ Unlimited search capabilities" },
+                            ],
+                          },
+                          {
+                            content: "🛡️ Cyber Watch System",
+                            children: [
+                              {
+                                content:
+                                  "📊 Multiple security feeds integration",
+                              },
+                              { content: "🔄 Auto-refresh capabilities" },
+                              { content: "📤 JSON export functionality" },
+                              {
+                                content: "⚙️ Configurable sources & intervals",
+                              },
+                            ],
+                          },
+                          {
+                            content: "🔧 Advanced Settings Manager",
+                            children: [
+                              { content: "🔑 API keys centralized management" },
+                              { content: "🎨 Real-time theme/font preview" },
+                              {
+                                content: "💾 Persistent configuration storage",
+                              },
+                              { content: "🔧 Editable paths system" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "💬 Chat System Enhancement",
+                            children: [
+                              { content: "➕ Web search parameter ajouté" },
+                              { content: "🔍 Context-aware responses" },
+                              { content: "🌐 External data integration" },
+                            ],
+                          },
+                          {
+                            content: "👁️ Watch Page Improvements",
+                            children: [
+                              { content: "➕ Multiple security sources" },
+                              { content: "🔄 Auto-refresh functionality" },
+                              { content: "📤 Export capabilities" },
+                              { content: "⚙️ Settings panel integration" },
+                            ],
+                          },
+                          {
+                            content: "⚙️ Settings Page Extensions",
+                            children: [
+                              { content: "➕ API keys management" },
+                              { content: "🎨 Theme/font preview system" },
+                              { content: "🔧 Editable paths configuration" },
+                            ],
+                          },
+                          {
+                            content: "🌐 API Endpoints Updated",
+                            children: [
+                              { content: "➕ Watch sources endpoints" },
+                              { content: "📊 Statistics endpoints" },
+                              { content: "🔧 Configuration management APIs" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🗑️ Modules Effacés",
+                        children: [
+                          {
+                            content:
+                              "❌ Aucun module supprimé dans cette version",
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Abandonnés/Remplacés",
+                        children: [
+                          {
+                            content: "🔍 Basic Search Capabilities",
+                            children: [
+                              {
+                                content:
+                                  "🔄 Local search remplacé par web search",
+                              },
+                              { content: "🌐 External data sources intégrés" },
+                              { content: "⚡ Unlimited search capabilities" },
+                            ],
+                          },
+                          {
+                            content: "🛡️ Basic Security Monitoring",
+                            children: [
+                              {
+                                content:
+                                  "🔄 Simple monitoring remplacé par multi-source",
+                              },
+                              { content: "📊 Professional security feeds" },
+                              { content: "🔄 Automated refresh system" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.7.04 — Version 2.1 Documentation Update (df3c916) — Comprehensive Architecture Docs",
+                children: [
+                  {
+                    content: "📚 Documentation Enhancement",
+                    children: [
+                      { content: "📖 Version 2.1 comprehensive documentation" },
+                      { content: "🏗️ Architecture documentation updates" },
+                      { content: "🔧 System component documentation" },
+                      { content: "📋 Release notes and features" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.7.04",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📖 Documentation System",
+                            children: [
+                              { content: "📚 Version 2.1 comprehensive docs" },
+                              {
+                                content:
+                                  "🏗️ Architecture documentation enhanced",
+                              },
+                              { content: "📋 Release notes updated" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.7.05 — Enhanced BenchPage & BMAD v2.1 (815486f) — Advanced Benchmarking Features",
+                children: [
+                  {
+                    content: "📊 Benchmarking Enhancements",
+                    children: [
+                      { content: "🔧 BenchPage v2.1 features" },
+                      { content: "🤖 BMAD pipeline improvements" },
+                      { content: "📈 Enhanced benchmarking capabilities" },
+                      { content: "⚡ Performance monitoring" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.7.05",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📊 BenchPage",
+                            children: [
+                              { content: "🔧 v2.1 feature enhancements" },
+                              { content: "📈 Advanced benchmarking tools" },
+                              { content: "⚡ Performance improvements" },
+                            ],
+                          },
+                          {
+                            content: "🤖 BMAD Pipeline",
+                            children: [
+                              { content: "🔄 v2.1 pipeline updates" },
+                              {
+                                content: "📊 Enhanced processing capabilities",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.7.06 — BenchPage Continuous Mode & UI Fixes (4077c58) — Automated Benchmarking",
+                children: [
+                  {
+                    content: "🔄 Continuous Operations",
+                    children: [
+                      { content: "📊 BenchPage continuous mode auto-advance" },
+                      { content: "⏱️ Time estimation features" },
+                      {
+                        content: "💬 ChatPage web search and file attachments",
+                      },
+                      { content: "🔧 UI stability improvements" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.7.06",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📊 BenchPage",
+                            children: [
+                              { content: "🔄 Continuous mode auto-advance" },
+                              { content: "⏱️ Time estimation functionality" },
+                            ],
+                          },
+                          {
+                            content: "💬 ChatPage",
+                            children: [
+                              { content: "🌐 Web search integration" },
+                              { content: "📎 File attachment support" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.7.07 — TypeScript Import Cleanup (a219c15) — Build Optimization",
+                children: [
+                  {
+                    content: "🧹 Code Quality",
+                    children: [
+                      { content: "📦 Unused TypeScript imports removed" },
+                      { content: "🔧 Build error fixes" },
+                      { content: "⚡ Compilation optimization" },
+                      { content: "🧹 Codebase cleanup" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.7.07",
+                    children: [
+                      {
+                        content: "🗑️ Modules Effacés",
+                        children: [
+                          {
+                            content: "📦 Unused TypeScript Imports",
+                            children: [
+                              {
+                                content:
+                                  "🧹 Build error causing imports removed",
+                              },
+                              { content: "⚡ Compilation optimization" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.7.08 — SPA Routing Implementation (f918fb1) — Single Page Application",
+                children: [
+                  {
+                    content: "🌐 Client-Side Routing",
+                    children: [
+                      { content: "🔄 SPA routing for all non-API routes" },
+                      { content: "📄 index.html served for client routes" },
+                      { content: "🔧 Frontend routing system" },
+                      { content: "⚡ Improved navigation" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.7.08",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🌐 Web Server",
+                            children: [
+                              { content: "🔄 SPA routing implementation" },
+                              {
+                                content:
+                                  "📄 index.html fallback for client routes",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.7.09 — Freya 2.3.2 Bug Fixes (06da6c2) — Stability & Performance",
+                children: [
+                  {
+                    content: "🐛 Bug Fixes & Optimizations",
+                    children: [
+                      { content: "🔧 Freya 2.3.2 bug fixes" },
+                      { content: "📦 Code-splitting improvements" },
+                      { content: "🎨 UX enhancements" },
+                      { content: "⚡ Performance optimizations" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.7.09",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🌐 Frontend Application",
+                            children: [
+                              { content: "🐛 Critical bug fixes" },
+                              { content: "📦 Code-splitting optimization" },
+                              { content: "🎨 UX improvements" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.8.00 — Files Navigation Fix (faf9c24) — UI Navigation Enhancement",
+                children: [
+                  {
+                    content: "📁 File Management",
+                    children: [
+                      { content: "🔙 Navigation back arrow reset fix" },
+                      { content: "📂 File selection state management" },
+                      { content: "🔧 UI navigation improvements" },
+                      { content: "⚡ User experience enhancement" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.8.00",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📁 Files Page",
+                            children: [
+                              { content: "🔙 Back arrow reset functionality" },
+                              { content: "📂 File selection state fixes" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.8.01 — v2.5.5 Critical Bug Fixes (d7056c4) — Chat & Research Stability",
+                children: [
+                  {
+                    content: "🔧 Critical Fixes",
+                    children: [
+                      { content: "💬 Chat mode corrections" },
+                      { content: "🔍 Research mode fixes" },
+                      { content: "🔄 Exchange mode improvements" },
+                      { content: "⚙️ Settings stability" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.8.01",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "💬 Chat System",
+                            children: [
+                              { content: "🔧 Critical bug corrections" },
+                              { content: "⚡ Stability improvements" },
+                            ],
+                          },
+                          {
+                            content: "🔍 Research Mode",
+                            children: [
+                              { content: "🐛 Bug fixes implemented" },
+                              { content: "🔄 Functionality corrections" },
+                            ],
+                          },
+                          {
+                            content: "⚙️ Settings",
+                            children: [
+                              { content: "🔧 Stability enhancements" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.8.02 — One-Click Launcher (6fa8603) — Deployment Automation",
+                children: [
+                  {
+                    content: "🚀 Launch Automation",
+                    children: [
+                      { content: "🖱️ One-click launcher for updates" },
+                      { content: "📦 Automated deployment system" },
+                      { content: "🔄 Update and launch integration" },
+                      { content: "⚡ Streamlined user experience" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.8.02",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "🚀 One-Click Launcher",
+                            children: [
+                              { content: "🖱️ Automated update and launch" },
+                              { content: "📦 Deployment automation" },
+                              { content: "🔄 Integrated workflow" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.8.03 — Windows Launcher Compatibility (beddd64) — Cross-Platform Support",
+                children: [
+                  {
+                    content: "🪟 Windows Compatibility",
+                    children: [
+                      { content: "🔧 npm compatibility fixes" },
+                      { content: "📦 Update Only option" },
+                      { content: "⚡ Windows deployment improvements" },
+                      { content: "🔄 Cross-platform launcher" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.8.03",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🚀 Launcher System",
+                            children: [
+                              { content: "🪟 Windows npm compatibility" },
+                              { content: "📦 Update-only functionality" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.8.04 — Enhanced Benchmarking UI (92167ec) — Advanced Benchmarking Suite",
+                children: [
+                  {
+                    content: "📊 Benchmarking Expansion",
+                    children: [
+                      { content: "🔧 New benchmarking roles" },
+                      { content: "📈 External benchmarks UI" },
+                      { content: "📊 Enhanced benchmarking capabilities" },
+                      { content: "🎯 Performance analysis tools" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.8.04",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📊 Benchmarking System",
+                            children: [
+                              { content: "🔧 New roles integration" },
+                              { content: "📈 External benchmarks UI" },
+                              { content: "📊 Enhanced analysis tools" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.8.05 — Chat Mode Corrections (094bb6c) — Communication Stability",
+                children: [
+                  {
+                    content: "💬 Chat System Fixes",
+                    children: [
+                      { content: "🔧 Major chat mode corrections" },
+                      { content: "🔍 Research mode fixes" },
+                      { content: "🔄 Exchange mode improvements" },
+                      { content: "⚡ Communication stability" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.8.05",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "💬 Chat Modes",
+                            children: [
+                              { content: "🔧 Major corrections implemented" },
+                              { content: "⚡ Stability enhancements" },
+                            ],
+                          },
+                          {
+                            content: "🔍 Research Mode",
+                            children: [
+                              { content: "🔧 Bug fixes and improvements" },
+                            ],
+                          },
+                          {
+                            content: "🔄 Exchange Mode",
+                            children: [
+                              { content: "🔧 Functionality corrections" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.8.06 — Real-time Chat Logging (2f3ef08) — Enhanced Communication Tracking",
+                children: [
+                  {
+                    content: "📝 Real-time Logging",
+                    children: [
+                      { content: "💬 Research & Autonomous mode logging" },
+                      { content: "🔄 Conversation persistence" },
+                      { content: "📊 Real-time tracking" },
+                      { content: "💾 Data persistence" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.8.06",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "💬 Chat System",
+                            children: [
+                              {
+                                content: "📝 Real-time logging implementation",
+                              },
+                              { content: "🔄 Conversation persistence" },
+                            ],
+                          },
+                          {
+                            content: "🤖 Autonomous Mode",
+                            children: [
+                              { content: "📊 Enhanced logging capabilities" },
+                            ],
+                          },
+                          {
+                            content: "🔍 Research Mode",
+                            children: [{ content: "📝 Logging improvements" }],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.8.07 — Autonomous Mode Stop Detection (17384a8) — Reliable Control",
+                children: [
+                  {
+                    content: "🛑 Control Reliability",
+                    children: [
+                      { content: "🔧 useRef for autonomous mode stop" },
+                      { content: "⚡ Reliable detection system" },
+                      { content: "🎛️ Control mechanism improvements" },
+                      { content: "🔄 State management fixes" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.8.07",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🤖 Autonomous Mode",
+                            children: [
+                              {
+                                content:
+                                  "🔧 useRef implementation for stop detection",
+                              },
+                              { content: "⚡ Reliable control mechanism" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.8.08 — Full Research to BMAD Automation (c77a556) — Complete Workflow Integration",
+                children: [
+                  {
+                    content: "🔄 Complete Automation",
+                    children: [
+                      { content: "🤖 Full automation from Research to BMAD" },
+                      { content: "🔄 Pipeline integration" },
+                      { content: "⚡ End-to-end workflow" },
+                      { content: "🎯 Automated processing" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.8.08",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🤖 Automation Pipeline",
+                            children: [
+                              {
+                                content: "🔄 Research to BMAD full automation",
+                              },
+                              { content: "⚡ Complete workflow integration" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.8.09 — Critical Bench & BMAD Fixes (8222412) — Pipeline Stability",
+                children: [
+                  {
+                    content: "🔧 Critical Fixes",
+                    children: [
+                      { content: "📊 Bench system fixes" },
+                      { content: "🤖 BMAD pipeline corrections" },
+                      { content: "⚡ Multiple critical fixes" },
+                      { content: "🔄 Stability improvements" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.8.09",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📊 Bench System",
+                            children: [
+                              { content: "🔧 Critical fixes implemented" },
+                              { content: "⚡ Stability enhancements" },
+                            ],
+                          },
+                          {
+                            content: "🤖 BMAD Pipeline",
+                            children: [
+                              { content: "🐛 Bug corrections" },
+                              { content: "🔄 Processing fixes" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.9.00 — BMAD Pipeline Improvements (a7f8605) — Advanced Processing",
+                children: [
+                  {
+                    content: "🤖 Pipeline Enhancements",
+                    children: [
+                      { content: "🔧 Major BMAD pipeline improvements" },
+                      { content: "📝 Real-time logging integration" },
+                      { content: "⚡ Code generation enhancements" },
+                      { content: "📊 Processing capabilities" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.9.00",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🤖 BMAD Pipeline",
+                            children: [
+                              { content: "🔧 Major improvements implemented" },
+                              { content: "📝 Real-time logging" },
+                              { content: "⚡ Code generation enhancements" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.9.01 — Resume & TestRunner Features (5d60987) — BMAD Functionality Expansion",
+                children: [
+                  {
+                    content: "▶️ Resume Functionality",
+                    children: [
+                      { content: "🔄 Resume capability added" },
+                      { content: "🧪 TestRunner agent integration" },
+                      { content: "📝 Real-time logging system" },
+                      { content: "⚡ Enhanced BMAD features" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.9.01",
+                    children: [
+                      {
+                        content: "➕ Modules Ajoutés",
+                        children: [
+                          {
+                            content: "▶️ Resume Functionality",
+                            children: [
+                              { content: "🔄 Process resumption capability" },
+                              { content: "💾 State persistence" },
+                            ],
+                          },
+                          {
+                            content: "🧪 TestRunner Agent",
+                            children: [
+                              { content: "🧪 Testing automation" },
+                              { content: "📊 Test execution system" },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🤖 BMAD System",
+                            children: [
+                              { content: "📝 Real-time logging integration" },
+                              { content: "⚡ Enhanced functionality" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.9.02 — BMAD Pipeline Fixes (a291ef9) — Code Generation & Validation",
+                children: [
+                  {
+                    content: "🔧 Pipeline Corrections",
+                    children: [
+                      { content: "⚡ Critical pipeline fixes" },
+                      { content: "💻 Code generation improvements" },
+                      { content: "✅ Validation enhancements" },
+                      { content: "🔄 Processing stability" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.9.02",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🤖 BMAD Pipeline",
+                            children: [
+                              {
+                                content:
+                                  "⚡ Critical fixes for code generation",
+                              },
+                              { content: "✅ Validation improvements" },
+                              { content: "🔄 Processing stability" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.9.03 — Story Generation Fixes (a27804f) — BMAD Content Generation",
+                children: [
+                  {
+                    content: "📖 Content Generation",
+                    children: [
+                      { content: "📚 Story generation fixes" },
+                      { content: "🤖 Dev agent fallback improvements" },
+                      { content: "🔧 Content processing corrections" },
+                      { content: "⚡ Generation stability" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.9.03",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "📖 Story Generation",
+                            children: [
+                              { content: "🔧 Critical fixes implemented" },
+                              { content: "⚡ Stability improvements" },
+                            ],
+                          },
+                          {
+                            content: "🤖 Dev Agent",
+                            children: [
+                              { content: "🔄 Fallback improvements" },
+                              { content: "⚡ Error handling enhancements" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                content:
+                  "v0.9.04 — Infinite Validation Loop (826d304) — BMAD Processing Automation",
+                children: [
+                  {
+                    content: "🔄 Validation Automation",
+                    children: [
+                      { content: "♾️ Infinite validation loop until success" },
+                      { content: "🤖 Automated processing system" },
+                      { content: "✅ Continuous validation" },
+                      { content: "⚡ Unattended operation" },
+                    ],
+                  },
+                  {
+                    content: "🔧 Modifications v0.9.04",
+                    children: [
+                      {
+                        content: "🔄 Modules Modifiés",
+                        children: [
+                          {
+                            content: "🤖 BMAD Validation",
+                            children: [
+                              { content: "♾️ Infinite loop implementation" },
+                              {
+                                content:
+                                  "✅ Automated validation until success",
+                              },
+                              { content: "⚡ Continuous processing" },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      // --------- Fold default (root + level1 open, deeper folded) ----------
+      function clone(obj) {
+        return JSON.parse(JSON.stringify(obj));
+      }
+
+      function foldByDefault(root, expandDepth = 1) {
+        // depth: root=0, children=1, etc.
+        function walk(node, depth) {
+          node.payload = node.payload || {};
+          // fold nodes deeper than expandDepth
+          node.payload.fold = depth > expandDepth ? 1 : 0;
+
+          if (Array.isArray(node.children)) {
+            node.children.forEach((c) => walk(c, depth + 1));
+          }
+        }
+        walk(root, 0);
+        return root;
+      }
+
+      // ---------------- Preferences ----------------
+      const LS = {
+        theme: "freya_theme",
+        nodeTheme: "freya_node_theme",
+        font: "freya_mm_font",
+      };
+
+      function applyPageTheme(mode) {
+        const html = document.documentElement;
+        html.classList.toggle("light", mode === "light");
+        html.classList.toggle("markmap-dark", mode === "dark");
+        html.classList.toggle("markmap-light", mode === "light");
+        localStorage.setItem(LS.theme, mode);
+      }
+
+      function applyNodeTheme(name) {
+        const html = document.documentElement;
+        html.classList.remove("node-classic", "node-soft", "node-neon");
+        html.classList.add(`node-${name}`);
+        localStorage.setItem(LS.nodeTheme, name);
+      }
+
+      function applyMindmapFont(name) {
+        const root = document.documentElement;
+        if (name === "inter")
+          root.style.setProperty(
+            "--mm-font",
+            "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+          );
+        if (name === "system")
+          root.style.setProperty(
+            "--mm-font",
+            "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+          );
+        if (name === "mono")
+          root.style.setProperty(
+            "--mm-font",
+            "'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+          );
+        localStorage.setItem(LS.font, name);
+      }
+
+      // ---------------- Fullscreen ----------------
+      async function toggleFullscreen(el) {
+        try {
+          if (document.fullscreenElement) {
+            await document.exitFullscreen();
+          } else {
+            await el.requestFullscreen(); // user gesture required
+          }
+        } catch (err) {
+          console.error("[fullscreen] failed:", err);
+        }
+      }
+
+      // ---------------- Markmap ----------------
+      let mm = null;
+
+      function safeFit() {
+        if (!mm) return;
+        try {
+          mm.fit();
+        } catch (e) {
+          console.warn("[markmap] fit() issue:", e);
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        // deps check (debug-friendly)
+        if (!window.d3) console.error("[deps] d3 not loaded (CDN blocked?)");
+        if (!window.markmap)
+          console.error("[deps] markmap-view not loaded (CDN blocked?)");
+
+        // apply saved prefs after fonts load
+        document.fonts.ready.then(() => {
+          applyPageTheme(localStorage.getItem(LS.theme) || "dark");
+          applyNodeTheme(localStorage.getItem(LS.nodeTheme) || "soft");
+          applyMindmapFont(localStorage.getItem(LS.font) || "inter");
+        });
+
+        const card = document.getElementById("card");
+        const wrap = document.getElementById("mindmapWrap");
+        const svg = document.getElementById("mindmap");
+        const loading = document.getElementById("loading");
+
+        const btnTheme = document.getElementById("btnTheme");
+        const btnFit = document.getElementById("btnFit");
+        const btnFullscreen = document.getElementById("btnFullscreen");
+        const selectNodeTheme = document.getElementById("selectNodeTheme");
+        const selectFont = document.getElementById("selectFont");
+
+        // sync selects with storage
+        selectNodeTheme.value = localStorage.getItem(LS.nodeTheme) || "soft";
+        selectFont.value = localStorage.getItem(LS.font) || "inter";
+
+        btnTheme.addEventListener("click", () => {
+          const current = localStorage.getItem(LS.theme) || "dark";
+          applyPageTheme(current === "dark" ? "light" : "dark");
+        });
+
+        btnFit.addEventListener("click", safeFit);
+        btnFullscreen.addEventListener("click", () => toggleFullscreen(card));
+
+        selectNodeTheme.addEventListener("change", (e) =>
+          applyNodeTheme(e.target.value),
+        );
+        selectFont.addEventListener("change", (e) => {
+          applyMindmapFont(e.target.value);
+          // Force mindmap re-render to apply font changes
+          if (mm) {
+            setTimeout(() => mm.fit(), 50);
+          }
+        });
+
+        try {
+          const { Markmap } = window.markmap;
+
+          // clone + fold default
+          const data = foldByDefault(clone(mindmapDataRaw), 1);
+
+          mm = Markmap.create(
+            svg,
+            {
+              zoom: true,
+              pan: true,
+              // NB: depending on markmap version, there are also options like spacing; we keep stable defaults.
+            },
+            data,
+          );
+
+          loading.style.display = "none";
+
+          // fit after render
+          requestAnimationFrame(() => safeFit());
+
+          // refit on resize and fullscreen changes
+          const ro = new ResizeObserver(() => safeFit());
+          ro.observe(wrap);
+
+          document.addEventListener("fullscreenchange", () => {
+            // Update button label
+            btnFullscreen.textContent = document.fullscreenElement
+              ? "Quitter"
+              : "Plein écran";
+            // Small delay allows layout to settle
+            setTimeout(safeFit, 60);
+          });
+        } catch (err) {
+          console.error("[markmap] init failed:", err);
+          loading.textContent =
+            "Erreur de chargement du mindmap (voir console).";
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -2,14 +2,17 @@ README.md
 pyproject.toml
 src/freya/__init__.py
 src/freya/autopilot.py
+src/freya/bench_hybrid.py
 src/freya/benchmarkq.py
 src/freya/bmad_sync.py
 src/freya/cli.py
 src/freya/config.py
 src/freya/console.py
 src/freya/fsx.py
+src/freya/hybrid_router.py
 src/freya/ide.py
 src/freya/llamacpp_server.py
+src/freya/local_runtimes.py
 src/freya/loggingx.py
 src/freya/model_manager.py
 src/freya/monitoring.py
@@ -17,6 +20,7 @@ src/freya/ollama_client.py
 src/freya/openai_compat_client.py
 src/freya/orchestrator.py
 src/freya/powershell.py
+src/freya/predict_consumption.py
 src/freya/prompts_store.py
 src/freya/quality.py
 src/freya/router.py
@@ -35,6 +39,7 @@ src/freya/agents/dev.py
 src/freya/agents/pm.py
 src/freya/agents/po.py
 src/freya/agents/qa.py
+src/freya/agents/runner.py
 src/freya/agents/sm.py
 src/freya/api/__init__.py
 src/freya/api/main.py
@@ -44,6 +49,7 @@ src/freya/api/routes/bench.py
 src/freya/api/routes/bmad.py
 src/freya/api/routes/chat.py
 src/freya/api/routes/files.py
+src/freya/api/routes/launcher.py
 src/freya/api/routes/models.py
 src/freya/api/routes/settings.py
 src/freya/api/routes/watch.py
@@ -53,3 +59,4 @@ src/freya/tools/redact.py
 src/freya/tools/shell.py
 src/freya/tools/websearch.py
 src/freya/tools/webwatch.py
+tests/test_hybrid_routing.py

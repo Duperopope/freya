@@ -1,0 +1,58 @@
+31ab3ab6ebf4953f4720a25026ed0e944037c4b5|2026-01-25 15:53:39 +0100|Initial release: BMAD multi-agent orchestrator, TUI, CLI, agents, benchmarks
+6d204a9b53b6afa9fcdef569e39d57881eb36272|2026-01-25 16:17:58 +0100|Mise à jour du README et améliorations générales
+c65001ec4b4541ad71617e39f873502200f1d538|2026-01-25 16:19:18 +0100|Ajout de la section Architecture avec arborescence du projet
+c96f52c65adbdf39c7b0a513061bf7e03f23927c|2026-01-25 16:22:27 +0100|Refonte du schéma d'architecture avec un ASCII propre et bien aligné
+301fef6ae6bbd3079f9441923d2011c04db1eab8|2026-01-25 16:25:05 +0100|Ajout de la version anglaise du README avec boutons de langue
+529619fc4e43159cfcaa9f7d847b239469707809|2026-01-25 16:28:34 +0100|Ajout de badges pour les modèles LLM supportés
+6606f776a8f247b1ddc2ee610dd918e08441ed66|2026-01-25 17:09:33 +0100|Add CaskaydiaCove Nerd Font and enhance TUI with clipboard, bench, and artifact management
+19a9602396c930d40ff9cbec75a656074451dcd7|2026-01-25 17:10:45 +0100|Bump version to 1.1.0 and add patch notes section
+6244513fef73fd566bcbf45e272b7f90315b8a3b|2026-01-25 17:11:08 +0100|Add versioning and patch notes to French README
+c736b1e26d18ec9a9c44dc5b35cb388ad7b2811c|2026-01-25 17:13:44 +0100|1.1 old Ui
+1e79195d8e3082730d453ff743c9d12741e5decb|2026-01-25 19:18:29 +0100|Fix async handling in TUI artifacts tree reload and update documentation
+48e1a53cd354bf70a3f83dcbd01f8b69db711e17|2026-01-25 19:20:00 +0100|1.1.1, Hud Fix
+10e1ca6b6a4f73c6b844499bfd82c162308cea9d|2026-01-25 21:28:22 +0100|Consolidate README, add autopilot command
+4fa117363a830b778860b304d81425517408933d|2026-01-25 21:43:17 +0100|Recreate French README.fr.md
+d934f7763cac41d57584e1e44616c16357dba77c|2026-01-26 10:37:49 +0100|Update to version 1.1.6
+dee94d9cb5f9a38abfabb8aee6dad19ac06a8fa1|2026-01-26 10:39:40 +0100|Update README files to version 1.1.6
+c86442bb76b5c55b10aed94fd5eb456ddefa57d7|2026-01-26 10:43:31 +0100|Update architecture diagrams to include CLI interface
+c4433cd57a24d591203c819014b4c56bd32d14cf|2026-01-26 10:46:14 +0100|Update architecture to include all current components and tools
+dc6b1487c57499ec49a8ea4c865b356b15053fbf|2026-01-26 10:48:02 +0100|Update interaction overview diagrams and add maintenance comments
+37f47fea7d00f141cf468306f5e594c6581216df|2026-01-26 10:55:34 +0100|Add maintenance TODO comments to all main README sections
+8d4ba746e8a7a10e52992dfa40df4da16e79a6ea|2026-01-26 11:37:48 +0100|Update to version 1.1.6.1
+c7cda1977461f7a2b6042bae2091d8bb25f54826|2026-01-26 11:26:53 +0000|feat: Freya 2.0 - Modern Web Interface
+a968cf0dc3fea9e1bce1f1144b480ddd75a93802|2026-01-26 11:29:54 +0000|fix: add missing api.ts client library
+31a489de68e15a93053f4ce4be34b8e952f4a4ef|2026-01-26 11:40:55 +0000|fix: add WebSocket endpoint route before static files mount
+81b341e42589b5275928c83060abfdfac4ff3570|2026-01-26 11:43:12 +0000|fix: ensure static files are served in both debug and production modes
+5ac9155dd93a66ed99c6866326497d62ba357df7|2026-01-26 21:32:10 +0000|feat: Major improvements - Web search, Cyber Watch, Settings
+df3c916b297b5b9c92ebe07a1d55b1ed3b736394|2026-01-26 21:48:51 +0000|docs: Update to version 2.1 with comprehensive architecture documentation
+815486fca127a1d94479e66f16fcf577a92540c4|2026-01-26 22:01:05 +0000|feat: Enhanced BenchPage and BMAD with v2.1 features
+1ef7d43003549822a59ec03310edd618454eb377|2026-01-26 22:44:12 +0000|feat: Hybrid Routing System v2.1 - Local/Remote LLM routing with multi-provider support
+4077c58742fbb13b31f7d28f5c852dfc30dfe6be|2026-01-26 23:07:41 +0000|fix: BenchPage continuous mode auto-advance, time estimation, and ChatPage web search/file attachments
+28ca5628b20108d97a9652a3410b09358852ee5e|2026-01-26 23:15:25 +0000|feat: Freya 2.2 - Hybrid Routing, Providers Dashboard, UI Fixes
+a219c15a7058243e67436f24f8aca034f6bdd8c1|2026-01-26 23:23:10 +0000|fix: Remove unused TypeScript imports causing build errors
+f918fb1088227bcf0cbaf8cc5adb29c0562d0cff|2026-01-26 23:30:37 +0000|fix: SPA routing - serve index.html for all non-API routes
+1af49c9e874b0095e7fc139c769255aaf716254d|2026-01-27 00:21:07 +0000|feat: Freya 2.3.0 - Major UX improvements
+820d77602cc1c19aa100a6979979062da92398b3|2026-01-27 00:45:33 +0000|feat: Freya 2.3.1 - Global Settings, Hybrid Routing UI, Provider Fixes
+06da6c284b2aef9ba2e4eb4aa01e62b1e2f59189|2026-01-27 01:49:08 +0000|fix: Freya 2.3.2 - Bug fixes, code-splitting, UX improvements
+d50f460b60ec204446d254bbd2b20caed6dd5ba1|2026-01-27 02:19:11 +0000|feat: Freya 2.3.5 - Major UX Improvements
+faf9c2486609d1326ce1020c3b542e70f07cbecc|2026-01-27 02:25:35 +0000|fix: Files navigation back arrow reset file selection
+32d6519d6ac7434e01b7016630bdc984d2a769f6|2026-01-27 02:53:22 +0000|feat: Freya v2.4 - Multi-Agent Chat improvements, Autonomy Mode, File deletion fixes
+dda4e14cef02d973496e1f3b08cf7113f5dbb474|2026-01-27 03:23:15 +0000|feat: Freya v2.4.1 - UX improvements and persistence
+1b3b0a7d895ba7ab7d3c716fc9ed608591f76cc7|2026-01-27 03:49:45 +0000|feat: Freya v2.4.2 - Research mode, UX improvements, data persistence
+59e299b122bf2d67606e56cecb2aa36a5ea43294|2026-01-27 04:22:21 +0000|feat: Freya v2.5 - Research modes, Chat Exchange, UX improvements
+aa449c9f908803ed1f809f75875c0299b8f62af0|2026-01-27 04:38:25 +0000|feat: Freya v2.5.5 - CyberAgent, Best Agent, External Benchmarks
+d7056c4934960ae7376c4f6acb2628f47fab6bef|2026-01-27 04:54:22 +0000|fix(v2.5.5): Corrections bugs critiques - Chat, Exchange, Research, Settings
+6fa8603456612e3169b798172b0891561f3a35ce|2026-01-27 05:04:38 +0000|feat(v2.5.5): Add One-Click Launcher for update and launch
+094bb6c7caee61a6baaed94b3e6a8b4ed17a1efe|2026-01-27 05:16:58 +0000|fix(chat): Corrections majeures Chat, Research et Exchange modes
+beddd64729e3cd0a4dd85d9e16c5fd93f29dd747|2026-01-27 05:21:57 +0000|fix(launcher): Windows npm compatibility + Update Only option
+92167eca233250b0940dc7bd90f2b4b6f602efca|2026-01-27 05:31:10 +0000|feat(v2.5.5): Enhanced benchmarking with new roles + External Benchmarks UI
+2f3ef0802b0fda63b46d6b89f9d51514bcccc03f|2026-01-27 05:44:15 +0000|fix(chat): Real-time logging for Research & Autonomous modes + conversation persistence
+17384a87404006ccbf677af92f433d6e9524eeae|2026-01-27 05:52:45 +0000|fix(chat): Use useRef for reliable autonomous mode stop detection
+c77a556dd75e67c6594aa3c1811844ff7533fa5e|2026-01-27 06:02:28 +0000|feat(autonomous): Full automation from Research to BMAD pipeline
+8222412314c160db8955538d9afe2892a9d9fcc3|2026-01-27 06:14:43 +0000|fix(bench+bmad): Multiple critical fixes
+a7f860564478701567673bec695373ccc2b0a59c|2026-01-27 06:33:03 +0000|feat(bmad): Major pipeline improvements with real-time logging and code generation
+5d609873dd0f932d4e1e90ceeab08eb1688a4ef7|2026-01-27 06:51:29 +0000|feat(bmad): Add Resume functionality, TestRunner agent, and real-time logging
+a291ef9a58d9cfcf589836db7aa4bc527999944c|2026-01-27 07:14:29 +0000|fix(bmad): Critical pipeline fixes for code generation and validation
+a27804fdc422cf8f128227eb32b157b8c91d6e0c|2026-01-27 07:27:04 +0000|fix(bmad): Fix story generation and Dev agent fallbacks
+826d304d7b3b6eb37a82db43d4c524855764726a|2026-01-27 07:33:48 +0000|feat(bmad): Infinite validation loop until app works
+572e172e3fffb2511316280c4539d9fb5650cf54|2026-01-27 07:40:16 +0000|feat(bmad): Visual feedback for validation cycles
