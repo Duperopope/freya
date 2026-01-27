@@ -524,8 +524,13 @@ export async function savePrompt(name: string, content: string): Promise<{ saved
 }
 
 export async function getVersion(): Promise<{ version: string; api_version: string }> {
-  const res = await fetch(`${API_BASE}/settings/version`)
-  return handleResponse(res)
+  try {
+    const res = await fetch(`${API_BASE}/settings/version`)
+    return handleResponse(res)
+  } catch {
+    // Fallback version if API fails
+    return { version: '2.5.5', api_version: '2.5' }
+  }
 }
 
 // -----------------------------------------------------------------------------

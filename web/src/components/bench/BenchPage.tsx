@@ -101,7 +101,8 @@ const PROGRAMS: ProgramInfo[] = [
   }
 ]
 
-const ROLES = ['analyst', 'pm', 'architect', 'po', 'sm', 'dev', 'qa']
+// Core BMAD roles + New v2.5 agent roles
+const ROLES = ['analyst', 'pm', 'architect', 'po', 'sm', 'dev', 'qa', 'security', 'devops', 'ux', 'data']
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
   analyst: 'Requirements analysis, stakeholder identification',
@@ -110,7 +111,27 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   po: 'Epic breakdown, feature prioritization',
   sm: 'User stories, sprint planning',
   dev: 'Code implementation, clean code practices',
-  qa: 'Quality assurance, test coverage'
+  qa: 'Quality assurance, test coverage',
+  // New v2.5 agent roles
+  security: 'Security analysis, vulnerability assessment, threat modeling',
+  devops: 'CI/CD pipelines, infrastructure, deployment automation',
+  ux: 'User experience design, wireframing, usability',
+  data: 'Data analysis, ML evaluation, statistical modeling'
+}
+
+// Role icons for UI
+const ROLE_ICONS: Record<string, string> = {
+  analyst: '📊',
+  pm: '📋',
+  architect: '🏗️',
+  po: '🎯',
+  sm: '📝',
+  dev: '💻',
+  qa: '🔍',
+  security: '🔐',
+  devops: '⚙️',
+  ux: '🎨',
+  data: '📈'
 }
 
 interface ModelOverride {
@@ -954,7 +975,8 @@ export function BenchPage() {
                         )}
                       >
                         <div className="flex items-center justify-between mb-3">
-                          <span className="text-sm font-medium text-freya-accent-blue capitalize">
+                          <span className="text-sm font-medium text-freya-accent-blue capitalize flex items-center gap-1.5">
+                            <span>{ROLE_ICONS[role] || '🤖'}</span>
                             {role}
                           </span>
                           <div className="flex items-center gap-1">

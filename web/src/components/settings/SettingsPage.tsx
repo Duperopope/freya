@@ -1778,11 +1778,46 @@ export function SettingsPage() {
                 </div>
                 <h4 className="text-2xl font-bold text-freya-text-primary mb-1">Freya</h4>
                 <p className="text-freya-text-secondary mb-4">
-                  Version {version?.version || '2.0.0'}
+                  Version {version?.version || '2.5.5'}
                 </p>
                 <div className="flex items-center justify-center gap-4 text-sm">
-                  <span className="badge badge-blue">API v{version?.api_version || '2.0'}</span>
+                  <span className="badge badge-blue">API v{version?.api_version || '2.5'}</span>
                   <span className="badge badge-purple">BMAD Method</span>
+                  <span className="badge badge-green">v2.5.5</span>
+                </div>
+              </div>
+
+              {/* What's New in v2.5.5 */}
+              <div className="p-4 bg-freya-bg-secondary rounded-lg border border-freya-border">
+                <h4 className="font-medium text-freya-text-primary mb-4 flex items-center gap-2">
+                  <Info className="w-5 h-5 text-freya-accent-cyan" />
+                  What's New in v2.5.5
+                </h4>
+                <div className="space-y-3 text-sm">
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <div className="font-medium text-freya-accent-purple mb-1">CyberAgent</div>
+                    <p className="text-freya-text-muted text-xs">AI-powered security analyst with threat briefings, CVE analysis, and chat interface</p>
+                  </div>
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <div className="font-medium text-freya-accent-yellow mb-1">Best Agent Mode</div>
+                    <p className="text-freya-text-muted text-xs">Automatic model selection based on benchmark scores (Settings → Global)</p>
+                  </div>
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <div className="font-medium text-freya-accent-green mb-1">External Benchmarks</div>
+                    <p className="text-freya-text-muted text-xs">Pre-integrated MMLU, HellaSwag, TruthfulQA, GSM8K, HumanEval, MT-Bench</p>
+                  </div>
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <div className="font-medium text-freya-accent-cyan mb-1">New Agent Roles</div>
+                    <p className="text-freya-text-muted text-xs">Security Expert, DevOps Engineer, UX Designer, Data Scientist</p>
+                  </div>
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <div className="font-medium text-freya-accent-blue mb-1">Research Mode</div>
+                    <p className="text-freya-text-muted text-xs">Internet search → Market analysis → BMAD brief (Assisted & Autonomous)</p>
+                  </div>
+                  <div className="p-3 bg-freya-bg-primary rounded-lg">
+                    <div className="font-medium text-freya-accent-red mb-1">AI Exchange</div>
+                    <p className="text-freya-text-muted text-xs">Two AIs discussing topics autonomously with configurable iterations</p>
+                  </div>
                 </div>
               </div>
 
