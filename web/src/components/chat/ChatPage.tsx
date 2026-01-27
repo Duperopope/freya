@@ -88,6 +88,7 @@ export function ChatPage() {
   const [researchSubMode, setResearchSubMode] = useState<ResearchSubMode>('assisted')
   const [autonomousRunning, setAutonomousRunning] = useState(false)
   const [autonomousIteration, setAutonomousIteration] = useState(0)
+  const autonomousStopRef = useRef(false) // FIXED: Use ref for async stop check
   
   // Exchange mode state (two AIs conversing)
   const [exchangeModel1, setExchangeModel1] = useState<string>('')
@@ -914,7 +915,9 @@ Format: Brief concis et actionnable pour démarrer un projet BMAD.`
   
   // Autonomous Research mode: auto-search for app ideas, analyze, and send to BMAD
   // IMPROVED: Real-time detailed logging like modern LLMs
+  // FIXED: Use ref for reliable async stop detection (closure-safe)
   const handleAutonomousResearch = async () => {
+    autonomousStopRef.current = false // Reset stop flag
     setAutonomousRunning(true)
     setAutonomousIteration(1)
     setResearchPhase('searching')
@@ -948,13 +951,13 @@ Format: Brief concis et actionnable pour démarrer un projet BMAD.`
       const trendingSearch = await api.webSearch('trending SaaS ideas 2024 2025 profitable', 5)
       updateLog(searchId, `✓ Tendances SaaS: ${trendingSearch.length} résultats`)
       
-      if (!autonomousRunning) { addLog(`⏹️ Arrêté par l'utilisateur`); return }
+      if (autonomousStopRef.current) { addLog(`⏹️ Arrêté par l'utilisateur`); return }
       
       searchId = addLog(`🔍 Recherche: "software market gaps opportunities"...`, true)
       const gapSearch = await api.webSearch('software market gaps opportunities underserved', 5)
       updateLog(searchId, `✓ Opportunités marché: ${gapSearch.length} résultats`)
       
-      if (!autonomousRunning) { addLog(`⏹️ Arrêté par l'utilisateur`); return }
+      if (autonomousStopRef.current) { addLog(`⏹️ Arrêté par l'utilisateur`); return }
       
       searchId = addLog(`🔍 Recherche: "no-code low-code app ideas"...`, true)
       const techSearch = await api.webSearch('no-code low-code app ideas for developers', 5)
@@ -964,7 +967,7 @@ Format: Brief concis et actionnable pour démarrer un projet BMAD.`
       
       addLog(`📊 **Résultats compilés:** ${allResults.length} opportunités trouvées\n\n${allResults.slice(0, 6).map((r, i) => `${i+1}. ${r.title}`).join('\n')}`)
       
-      if (!autonomousRunning) { addLog(`⏹️ Arrêté par l'utilisateur`); return }
+      if (autonomousStopRef.current) { addLog(`⏹️ Arrêté par l'utilisateur`); return }
       
       // Phase 2: AI selects the best idea
       setResearchPhase('analyzing')
@@ -995,7 +998,7 @@ Respond with:
       
       updateLog(analysisId, `✓ Analyse terminée (${selectionData.model})`)
       
-      if (!autonomousRunning) { addLog(`⏹️ Arrêté par l'utilisateur`); return }
+      if (autonomousStopRef.current) { addLog(`⏹️ Arrêté par l'utilisateur`); return }
       
       const ideaMsg: Message = {
         id: `auto-idea-${Date.now()}`,
@@ -1865,7 +1868,10 @@ Create a structured brief with:
                 <div className="flex items-center gap-2">
                   {autonomousRunning ? (
                     <button
-                      onClick={() => setAutonomousRunning(false)}
+                      onClick={() => {
+                        autonomousStopRef.current = true // Signal stop to async function
+                        setAutonomousRunning(false)
+                      }}
                       className="btn-danger text-xs px-2 py-1 flex items-center gap-1"
                     >
                       <StopCircle className="w-3 h-3" />
