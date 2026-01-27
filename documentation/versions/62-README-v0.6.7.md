@@ -74,9 +74,11 @@ python -m freya clipboard
 - **Operating Systems**: Windows, macOS, Linux
 - **Fonts**: CaskaydiaCove Nerd Font recommended
 - **Terminal**: Modern terminal with Unicode support
+
 ## Credits
 
 **Created by Samir Medjaher** - [@Duperopope](https://github.com/Duperopope)
+
 ## Previous Version
 
 [v0.6.6 - Major version update to v1.1.0](61-README-v0.6.6.md)
