@@ -36,9 +36,9 @@ import {
   getLauncherStatus,
   getLauncherLogs,
   checkForUpdates,
-  triggerUpdate,
   triggerBuild,
   triggerBootstrap,
+  triggerUpdateOnly,
   clearLauncherError,
   clearLauncherLogs,
   type LauncherLog
@@ -70,11 +70,6 @@ export function LauncherPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['launcher-status'] })
   })
   
-  const updateMutation = useMutation({
-    mutationFn: triggerUpdate,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['launcher-status'] })
-  })
-  
   const buildMutation = useMutation({
     mutationFn: triggerBuild,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['launcher-status'] })
@@ -82,6 +77,11 @@ export function LauncherPage() {
   
   const bootstrapMutation = useMutation({
     mutationFn: triggerBootstrap,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['launcher-status'] })
+  })
+  
+  const updateOnlyMutation = useMutation({
+    mutationFn: triggerUpdateOnly,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['launcher-status'] })
   })
   
@@ -221,15 +221,15 @@ export function LauncherPage() {
           </button>
         </div>
         
-        {/* Git Update */}
+        {/* Update Only (Git + pip, skip npm) */}
         <ActionCard
           icon={GitBranch}
-          title="Git Pull"
-          description="Pull latest changes from repository"
-          buttonText="Update"
-          onClick={() => updateMutation.mutate()}
+          title="Update Only"
+          description="Git pull + pip (skip npm if built)"
+          buttonText="Quick Update"
+          onClick={() => updateOnlyMutation.mutate()}
           disabled={isOperationRunning || false}
-          loading={updateMutation.isPending || status?.is_updating || false}
+          loading={updateOnlyMutation.isPending || false}
           color="blue"
         />
         
@@ -237,7 +237,7 @@ export function LauncherPage() {
         <ActionCard
           icon={Hammer}
           title="Build Frontend"
-          description="Rebuild the web interface"
+          description="npm install + build"
           buttonText="Build"
           onClick={() => buildMutation.mutate()}
           disabled={isOperationRunning || false}
@@ -248,8 +248,8 @@ export function LauncherPage() {
         {/* System Status */}
         <ActionCard
           icon={Cpu}
-          title="System Status"
-          description={status?.system_info?.web_built ? 'Frontend built' : 'Frontend not built'}
+          title="System"
+          description={status?.system_info?.web_built ? 'Frontend OK' : 'Build needed'}
           buttonText="Refresh"
           onClick={() => queryClient.invalidateQueries({ queryKey: ['launcher-status'] })}
           disabled={false}

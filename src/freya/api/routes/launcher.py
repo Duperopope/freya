@@ -106,20 +106,41 @@ def get_project_root() -> Path:
     return Path(__file__).parent.parent.parent.parent.parent
 
 
+def get_npm_command() -> str:
+    """Get the correct npm command for the current platform."""
+    if sys.platform == "win32":
+        # On Windows, try npm.cmd first, then npm
+        for cmd in ["npm.cmd", "npm"]:
+            try:
+                result = subprocess.run([cmd, "--version"], capture_output=True, timeout=10)
+                if result.returncode == 0:
+                    return cmd
+            except:
+                pass
+        return "npm.cmd"  # Default fallback
+    return "npm"
+
+
 def run_command(cmd: list[str], cwd: Path | None = None, timeout: int = 300) -> tuple[bool, str, str]:
     """Run a shell command and return (success, stdout, stderr)."""
     try:
+        # On Windows, use shell=True for better PATH resolution
+        use_shell = sys.platform == "win32"
+        
         result = subprocess.run(
             cmd,
             cwd=str(cwd) if cwd else None,
             capture_output=True,
             text=True,
             timeout=timeout,
+            shell=use_shell,
             env={**os.environ, "PYTHONUNBUFFERED": "1"}
         )
         return result.returncode == 0, result.stdout, result.stderr
     except subprocess.TimeoutExpired:
         return False, "", f"Command timed out after {timeout}s"
+    except FileNotFoundError as e:
+        return False, "", f"Command not found: {cmd[0]}. Please ensure it is installed and in PATH."
     except Exception as e:
         return False, "", str(e)
 
@@ -208,8 +229,9 @@ def get_system_info() -> dict[str, Any]:
     node_ok = success
     node_ver = node_version.strip() if success else "Not found"
     
-    # Check npm
-    success, npm_version, _ = run_command(["npm", "--version"])
+    # Check npm (handle Windows npm.cmd)
+    npm_cmd = get_npm_command()
+    success, npm_version, _ = run_command([npm_cmd, "--version"])
     npm_ok = success
     npm_ver = npm_version.strip() if success else "Not found"
     
@@ -296,13 +318,14 @@ async def do_npm_install(project_root: Path):
     """Install npm dependencies."""
     global launcher_state
     web_dir = project_root / "web"
+    npm_cmd = get_npm_command()
     
     launcher_state.current_operation = "Installing npm dependencies..."
     launcher_state.progress = 10
-    launcher_state.add_log("info", "Running npm install...")
+    launcher_state.add_log("info", f"Running {npm_cmd} install...")
     
     success, stdout, stderr = await run_command_async(
-        ["npm", "install"],
+        [npm_cmd, "install"],
         cwd=web_dir,
         timeout=300
     )
@@ -333,10 +356,11 @@ async def do_build_frontend(project_root: Path):
             await do_npm_install(project_root)
         
         launcher_state.progress = 70
-        launcher_state.add_log("info", "Running npm run build...")
+        npm_cmd = get_npm_command()
+        launcher_state.add_log("info", f"Running {npm_cmd} run build...")
         
         success, stdout, stderr = await run_command_async(
-            ["npm", "run", "build"],
+            [npm_cmd, "run", "build"],
             cwd=web_dir,
             timeout=300
         )
@@ -359,7 +383,7 @@ async def do_build_frontend(project_root: Path):
         launcher_state.current_operation = None
 
 
-async def do_full_bootstrap(project_root: Path):
+async def do_full_bootstrap(project_root: Path, skip_npm: bool = False):
     """Perform full bootstrap: update + install deps + build."""
     global launcher_state
     
@@ -387,13 +411,24 @@ async def do_full_bootstrap(project_root: Path):
         
         launcher_state.progress = 40
         
-        # Step 3: npm install
+        # Check if we should skip npm (frontend already built)
         web_dir = project_root / "web"
+        web_dist = web_dir / "dist"
+        frontend_exists = web_dist.exists() and (web_dist / "index.html").exists()
+        
+        if skip_npm and frontend_exists:
+            launcher_state.add_log("info", "Skipping npm (frontend already built)")
+            launcher_state.progress = 100
+            launcher_state.last_update = datetime.now()
+            return
+        
+        # Step 3: npm install
+        npm_cmd = get_npm_command()
         launcher_state.current_operation = "Installing npm dependencies..."
-        launcher_state.add_log("info", "Installing npm dependencies...")
+        launcher_state.add_log("info", f"Installing npm dependencies ({npm_cmd})...")
         
         success, _, stderr = await run_command_async(
-            ["npm", "install"],
+            [npm_cmd, "install"],
             cwd=web_dir,
             timeout=300
         )
@@ -401,9 +436,16 @@ async def do_full_bootstrap(project_root: Path):
         if success:
             launcher_state.add_log("info", "npm dependencies installed")
         else:
-            launcher_state.add_log("error", f"npm install failed: {stderr[:100]}")
-            launcher_state.error = "npm install failed"
-            return
+            # Check if frontend is already built - if so, just warn but don't fail
+            if frontend_exists:
+                launcher_state.add_log("warning", f"npm install failed but frontend exists: {stderr[:100]}")
+                launcher_state.progress = 100
+                launcher_state.last_update = datetime.now()
+                return
+            else:
+                launcher_state.add_log("error", f"npm install failed: {stderr[:100]}")
+                launcher_state.error = "npm install failed - frontend not built"
+                return
         
         launcher_state.progress = 60
         
@@ -523,6 +565,29 @@ async def trigger_build(background_tasks: BackgroundTasks):
         success=True,
         message="Build started",
         details={"status": "in_progress"}
+    )
+
+
+@router.post("/update-only", response_model=LauncherResult)
+async def trigger_update_only(background_tasks: BackgroundTasks):
+    """Trigger update without npm rebuild (Git pull + pip only)."""
+    if launcher_state.is_updating or launcher_state.is_building:
+        return LauncherResult(
+            success=False,
+            message="Another operation is in progress",
+            details={"current_operation": launcher_state.current_operation}
+        )
+    
+    launcher_state.reset()
+    project_root = get_project_root()
+    
+    # Use bootstrap with skip_npm=True
+    background_tasks.add_task(do_full_bootstrap, project_root, True)
+    
+    return LauncherResult(
+        success=True,
+        message="Update started (skip npm)",
+        details={"status": "in_progress", "skip_npm": True}
     )
 
 

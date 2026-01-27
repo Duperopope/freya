@@ -1000,6 +1000,11 @@ export async function triggerBootstrap(): Promise<LauncherResult> {
   return handleResponse(res)
 }
 
+export async function triggerUpdateOnly(): Promise<LauncherResult> {
+  const res = await fetch(`${API_BASE}/launcher/update-only`, { method: 'POST' })
+  return handleResponse(res)
+}
+
 export async function clearLauncherError(): Promise<LauncherResult> {
   const res = await fetch(`${API_BASE}/launcher/clear-error`, { method: 'POST' })
   return handleResponse(res)
